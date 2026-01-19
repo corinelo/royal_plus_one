@@ -8,7 +8,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
     <style>
-        /* 高さ100dvhで固定し、スクロールを禁止 */
         body { 
             font-family: 'Roboto Mono', monospace; 
             transition: background-color 0.5s ease; 
@@ -23,7 +22,7 @@
 
         .card-base {
             background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
-            border-radius: 6px; /* 角丸を少し小さく */
+            border-radius: 4px;
             box-shadow: 1px 2px 4px rgba(0,0,0,0.3);
             position: relative;
             overflow: hidden;
@@ -31,7 +30,6 @@
             transition: transform 0.1s;
             user-select: none;
         }
-        /* スマホでの操作性向上のためホバーエフェクトは控えめに、選択時は明確に */
         .card.selected { transform: translateY(-20px) scale(1.05) !important; z-index: 30; box-shadow: 0 0 10px rgba(250, 204, 21, 0.8); border-color: #facc15; }
         
         .card-back {
@@ -43,9 +41,9 @@
         .hint-red { box-shadow: 0 0 8px #ef4444; border-color: #ef4444; }
 
         .log-area { scrollbar-width: thin; scrollbar-color: #4b5563 #1f2937; }
-        .log-area::-webkit-scrollbar { width: 6px; }
+        .log-area::-webkit-scrollbar { width: 4px; }
         .log-area::-webkit-scrollbar-track { background: #1f2937; }
-        .log-area::-webkit-scrollbar-thumb { background-color: #4b5563; border-radius: 3px; }
+        .log-area::-webkit-scrollbar-thumb { background-color: #4b5563; border-radius: 2px; }
     </style>
 </head>
 <body class="bg-wait text-white flex flex-col">
@@ -81,49 +79,51 @@
 
     <div id="game-screen" class="hidden flex-grow flex flex-row h-full overflow-hidden">
         <div class="flex-grow flex flex-col relative h-full">
-            <div class="flex justify-between items-center px-4 py-2 z-10 bg-black/20">
-                <div class="text-xl text-yellow-500 font-casino">Royal +1 <span class="text-[10px] text-gray-400 ml-1" id="room-display"></span></div>
-                <div class="flex gap-2">
-                    <div class="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-full border border-white/10">
-                        <span class="text-[10px] text-gray-400">DECK</span>
-                        <span id="deck-count" class="text-sm font-bold font-mono">0</span>
+            
+            <div class="flex justify-between items-center px-2 py-1 z-10 bg-black/20 h-10 shrink-0">
+                <div class="text-lg text-yellow-500 font-casino truncate">R+1 <span class="text-[10px] text-gray-400" id="room-display"></span></div>
+                <div class="flex gap-2 items-center">
+                    <div class="flex items-center gap-1 bg-black/40 px-2 py-0.5 rounded-full border border-white/10">
+                        <span class="text-[9px] text-gray-400">DECK</span>
+                        <span id="deck-count" class="text-xs font-bold font-mono">0</span>
                     </div>
-                    <button onclick="document.getElementById('rule-modal').classList.remove('hidden')" class="bg-gray-700 text-white px-2 py-1 rounded text-[10px] border border-gray-500">RULES</button>
+                    <button onclick="document.getElementById('rule-modal').classList.remove('hidden')" class="bg-gray-700 text-white px-2 py-0.5 rounded text-[10px] border border-gray-500">RULES</button>
                 </div>
             </div>
 
-            <div id="opponents-area" class="flex justify-around items-start w-full px-2 h-20 shrink-0"></div>
+            <div id="opponents-area" class="flex justify-around items-start w-full px-1 h-16 shrink-0 mt-1"></div>
 
-            <div class="flex-grow flex flex-col items-center justify-center relative">
-                <div class="absolute top-2 text-center opacity-80">
+            <div class="flex-grow flex flex-col items-center justify-center relative min-h-0">
+                <div class="text-center opacity-80 mb-1">
                     <div class="text-[9px] tracking-[0.2em] uppercase text-yellow-200">Next</div>
-                    <div id="target-rank" class="text-2xl font-casino font-bold text-white drop-shadow-lg">-</div>
+                    <div id="target-rank" class="text-xl font-casino font-bold text-white drop-shadow-lg leading-none">-</div>
                 </div>
-                <div id="field-container" class="relative w-full h-32 flex flex-col items-center justify-center">
+                <div id="field-container" class="relative w-full h-24 flex flex-col items-center justify-center">
                     <div id="field-cards" class="flex -space-x-8 z-10 scale-90 sm:scale-100"></div>
-                    <div id="field-owner-label" class="mt-2 opacity-0 transition-opacity bg-black/50 px-2 py-0.5 rounded-full text-[10px] text-yellow-300 font-bold border border-yellow-500/30">Played by: -</div>
+                    <div id="field-owner-label" class="mt-2 opacity-0 transition-opacity bg-black/50 px-2 py-0.5 rounded-full text-[9px] text-yellow-300 font-bold border border-yellow-500/30">Played by: -</div>
                 </div>
             </div>
 
-            <div class="w-full relative pb-2 sm:pb-4 shrink-0">
-                <div class="absolute bottom-16 left-2 z-20 bg-gray-900/80 border border-yellow-500/30 p-2 rounded-lg min-w-[80px] text-center">
-                    <div class="text-[9px] text-yellow-500 uppercase">Score</div>
-                    <div id="my-score" class="text-xl font-mono font-bold text-white">0</div>
-                    <div id="parent-badge" class="hidden text-center"><span class="bg-red-600 text-[8px] px-1 rounded text-white font-bold">DEALER</span></div>
+            <div class="w-full flex flex-col items-center pb-2 sm:pb-4 shrink-0 bg-gradient-to-t from-black/60 to-transparent">
+                
+                <div class="mb-1 flex items-center gap-2 bg-gray-900/80 border border-yellow-500/30 px-3 py-0.5 rounded-full">
+                    <span class="text-[9px] text-yellow-500">SCORE</span>
+                    <span id="my-score" class="text-sm font-mono font-bold text-white">0</span>
+                    <span id="parent-badge" class="hidden bg-red-600 text-[8px] px-1 rounded text-white font-bold">DEALER</span>
                 </div>
 
-                <div id="my-hand" class="flex justify-center -space-x-6 sm:-space-x-8 px-4 h-24 sm:h-28 items-end mb-2"></div>
+                <div id="my-hand" class="flex justify-center -space-x-5 sm:-space-x-8 px-4 h-24 sm:h-28 items-end mb-2 w-full overflow-visible"></div>
 
-                <div class="flex justify-center gap-4 h-12 mb-2 sm:mb-0">
-                    <button id="btn-play" onclick="playCards()" class="hidden bg-blue-600 active:bg-blue-400 text-white font-bold py-2 px-8 rounded-full shadow-lg border border-blue-400 text-sm tracking-widest">PLAY</button>
-                    <button id="btn-pass" onclick="passTurn()" class="bg-gray-700 active:bg-gray-500 text-gray-300 font-bold py-2 px-8 rounded-full shadow-lg border border-gray-600 text-sm tracking-widest">PASS</button>
+                <div class="flex justify-center gap-4 h-10 w-full px-4">
+                    <button id="btn-play" onclick="playCards()" class="hidden w-1/2 bg-blue-600 active:bg-blue-400 text-white font-bold rounded-full shadow-lg border border-blue-400 text-sm tracking-widest flex items-center justify-center">PLAY</button>
+                    <button id="btn-pass" onclick="passTurn()" class="w-1/2 bg-gray-700 active:bg-gray-500 text-gray-300 font-bold rounded-full shadow-lg border border-gray-600 text-sm tracking-widest flex items-center justify-center">PASS</button>
                 </div>
             </div>
         </div>
 
-        <div class="w-48 bg-gray-900 border-l border-gray-700 flex flex-col hidden sm:flex">
-            <div class="p-2 border-b border-gray-700 bg-gray-800"><h2 class="text-xs font-bold text-gray-400">LOG</h2></div>
-            <div id="game-log" class="flex-grow p-2 overflow-y-auto log-area space-y-1 text-[10px] font-mono text-gray-300"></div>
+        <div class="w-24 sm:w-48 bg-gray-900 border-l border-gray-700 flex flex-col shrink-0">
+            <div class="p-1 sm:p-2 border-b border-gray-700 bg-gray-800 text-center"><h2 class="text-[10px] font-bold text-gray-400">LOG</h2></div>
+            <div id="game-log" class="flex-grow p-1 overflow-y-auto log-area space-y-1 text-[9px] font-mono text-gray-300 break-words leading-tight"></div>
         </div>
     </div>
 
@@ -221,11 +221,13 @@
         const isMyTurn = (state.turn === state.my_idx);
         document.body.className = isMyTurn ? 'bg-my-turn text-white flex flex-col h-[100dvh]' : 'bg-wait text-white flex flex-col h-[100dvh]';
 
-        // ログ (PCのみ表示)
+        // ログ
         const logArea = document.getElementById('game-log');
         logArea.innerHTML = [...state.logs].reverse().map(log => {
+            // 名前を短縮表示
+            let dispLog = log.replace(" played", "").replace(" passed", " pass").replace(" joined", " in");
             const color = log.includes(myName) || log.includes("YOU") ? "text-yellow-400" : "text-gray-400";
-            return `<div class="${color} border-b border-gray-800 pb-1 mb-1">${log}</div>`;
+            return `<div class="${color} border-b border-gray-800 pb-1 mb-1">${dispLog}</div>`;
         }).join('');
         logArea.scrollTop = 0;
 
@@ -237,20 +239,19 @@
             let handHTML = '';
             for(let i=0; i<p.hand_count; i++) {
                 if(i>=10) break; 
-                // カードを小さく、重ねる
-                handHTML += `<div class="card-back absolute w-5 h-8 sm:w-6 sm:h-10" style="left:${i*8}px; top:0;"></div>`;
+                handHTML += `<div class="card-back absolute w-4 h-6 sm:w-6 sm:h-10" style="left:${i*6}px; top:0;"></div>`;
             }
             return `
                 <div class="flex flex-col items-center transition-all ${isTurn ? 'scale-110 opacity-100' : 'opacity-60'}">
-                    <div class="relative w-10 h-10 sm:w-12 sm:h-12 mb-1">
+                    <div class="relative w-8 h-8 sm:w-12 sm:h-12 mb-1">
                         <div class="w-full h-full rounded-full bg-gray-700 border-2 ${isTurn ? 'border-yellow-400 shadow-[0_0_10px_gold]' : 'border-gray-500'} flex items-center justify-center relative">
-                            <span class="text-lg">${p.is_cpu ? '🤖' : '👤'}</span>
-                            ${isParent ? '<span class="absolute -top-1 -right-1 text-[10px]">👑</span>' : ''}
+                            <span class="text-sm sm:text-lg">${p.is_cpu ? '🤖' : '👤'}</span>
+                            ${isParent ? '<span class="absolute -top-1 -right-1 text-[8px] sm:text-[10px]">👑</span>' : ''}
                         </div>
-                        <div class="absolute -bottom-2 w-full text-center"><span class="bg-black text-[8px] px-1 rounded truncate w-14 block mx-auto">${p.name}</span></div>
+                        <div class="absolute -bottom-2 w-full text-center"><span class="bg-black text-[8px] px-1 rounded truncate w-12 block mx-auto">${p.name}</span></div>
                     </div>
-                    <div class="relative h-8 sm:h-10 mt-1 w-20">${handHTML}</div>
-                    <div class="text-[9px] text-gray-400">Score: ${p.score}</div>
+                    <div class="relative h-6 sm:h-10 mt-1 w-16 sm:w-20">${handHTML}</div>
+                    <div class="text-[8px] text-gray-400">Score: ${p.score}</div>
                 </div>
             `;
         }).join('');
@@ -282,7 +283,7 @@
         }
         document.getElementById('target-rank').innerText = targetText;
 
-        // 手札
+        // 手札周り更新
         document.getElementById('my-score').innerText = state.my_score;
         if(state.parent === state.my_idx) document.getElementById('parent-badge').classList.remove('hidden');
         else document.getElementById('parent-badge').classList.add('hidden');
@@ -298,13 +299,12 @@
                 else if(targetText==="FREE") isPlayable = true;
             }
             
-            // 手札カードサイズ調整 (スマホ用)
+            // 手札カードサイズ
             let classes = `card-base w-14 h-20 sm:w-16 sm:h-24 flex flex-col items-center justify-center cursor-pointer `;
             if(isSel) classes += "selected ";
             else if(isPlayable) classes += "hint-blue ";
             
-            // 扇状に配置
-            const style = `margin-left: -16px; z-index:${i}; transform: rotate(${(i-state.my_hand.length/2)*2.5}deg) translateY(${isSel?-20:0}px);`;
+            const style = `margin-left: -18px; z-index:${i}; transform: rotate(${(i-state.my_hand.length/2)*2.5}deg) translateY(${isSel?-20:0}px);`;
 
             return `<div onclick="toggle(${i})" class="${classes}" style="${style}">
                 <div class="card-pattern"></div>
@@ -342,8 +342,7 @@
     }
 
     function renderCard(c, large, idx) {
-        // フィールドカードサイズ調整
-        return `<div class="card-base w-12 h-16 sm:w-14 sm:h-20 flex flex-col items-center justify-center" style="margin-left:${idx===0?0:-20}px; z-index:${idx}; transform: rotate(${(Math.random()-0.5)*10}deg);">
+        return `<div class="card-base w-10 h-14 sm:w-14 sm:h-20 flex flex-col items-center justify-center" style="margin-left:${idx===0?0:-20}px; z-index:${idx}; transform: rotate(${(Math.random()-0.5)*10}deg);">
             <div class="card-inner-border"></div>
             ${renderCardContent(c, true)}
         </div>`;
@@ -352,11 +351,10 @@
     function renderCardContent(c, small=false) {
         const isRed = (c.suit==='♥'||c.suit==='♦');
         const color = isRed ? 'text-red-600' : 'text-gray-900';
-        // フォントサイズ微調整
         return `
             <div class="${color} font-bold flex flex-col items-center leading-none z-10">
                 <span class="font-rank text-lg sm:text-2xl">${getRankName(c.rank)}</span>
-                <span class="text-xl sm:text-3xl">${SUITS[c.suit]}</span>
+                <span class="text-sm sm:text-2xl">${SUITS[c.suit]}</span>
             </div>
         `;
     }
