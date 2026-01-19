@@ -12,6 +12,19 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app, async_mode='eventlet', cors_allowed_origins='*')
 
+# --- グローバル変数 & ヘルパー関数 ---
+rooms = {}
+
+# GameStateより先に定義して、クラス内から呼べるようにする
+def emit_update(room_id):
+    if room_id not in rooms: return
+    game = rooms[room_id]
+    # 全プレイヤー（CPU以外）に通知
+    for p in game.players:
+        if p.get('is_cpu'): continue
+        state = game.get_public_state(p['sid'])
+        socketio.emit('update_state', state, room=p['sid'])
+
 # --- ゲーム定数 ---
 SUITS = ['♠', '♥', '♦', '♣']
 RANKS = list(range(3, 16))
@@ -102,7 +115,6 @@ class GameState:
         self.add_log(f"--- Game Start (Dealer: {dealer['name']}) ---")
         self.add_log(f"Deck remaining: {len(self.deck)}")
 
-        # 親がCPUなら思考開始
         if dealer.get('is_cpu'):
             print(f"[DEBUG] Dealer is CPU ({dealer['name']}). Starting turn...")
             socketio.start_background_task(self.run_cpu_turn, dealer['sid'])
@@ -266,6 +278,12 @@ class GameState:
             if has_eight or has_two:
                 reason = "8-Cut" if has_eight else "2-Power"
                 self.add_log(f"⚡ {reason}! Field Cleared.")
+                
+                # --- 【修正】ここで一度画面を更新して、カードを見せる ---
+                emit_update(self.room_id)
+                # 1秒待つ（プレイヤーが「あ、8が出た」と認識する時間）
+                socketio.sleep(1.0)
+                
                 self.draw_all()
                 self.field = []
                 self.field_type = None
@@ -278,7 +296,6 @@ class GameState:
                 self.calculate_scores(p_idx, is_tenhou)
                 self.game_over = True
             
-            # 次のプレイヤーがCPUならタスク実行
             if not self.game_over:
                 next_p = self.players[self.turn_idx]
                 if next_p.get('is_cpu'):
@@ -300,6 +317,11 @@ class GameState:
             
             if self.pass_count >= self.num_players - 1:
                 self.add_log("🍂 Field Cleared (All passed)")
+                
+                # --- 【修正】流れる前にも一瞬待つ（ログを見せる） ---
+                emit_update(self.room_id)
+                socketio.sleep(1.0)
+                
                 self.draw_all()
                 self.field = []
                 self.field_type = None
@@ -313,20 +335,19 @@ class GameState:
             
             return True
 
-    # --- CPU思考ロジック ---
     def run_cpu_turn(self, cpu_sid):
-        """CPUのターンを実行 (emitには socketio.emit を使用してコンテキスト外エラーを回避)"""
         with app.app_context():
             try:
+                # 思考時間（演出用）
                 socketio.sleep(1.0)
                 if self.game_over: return
 
                 current_p = self.players[self.turn_idx]
-                if current_p['sid'] != cpu_sid:
-                    return
+                if current_p['sid'] != cpu_sid: return
 
                 p = current_p
-                # --- 候補生成 ---
+                
+                # --- CPU思考ロジック ---
                 candidates = []
                 hand_indices = list(range(len(p["hand"])))
                 
@@ -407,7 +428,6 @@ class GameState:
                 else:
                     self.apply_pass(cpu_sid)
                 
-                # 【重要】コンテキスト外からのブロードキャストには socketio.emit を使う
                 emit_update(self.room_id)
 
             except Exception as e:
@@ -456,8 +476,6 @@ class GameState:
             "game_started": self.game_started,
             "deck_count": len(self.deck)
         }
-
-rooms = {}
 
 @app.route('/')
 def index(): return render_template('index.html')
@@ -537,6 +555,14 @@ def on_next(data):
         game.next_game()
         emit_update(room_id)
 
+@socketio.on('reset_game')
+def on_reset(data):
+    room_id = data['room']
+    if room_id in rooms:
+        game = rooms[room_id]
+        game.init_round(keep_scores=False)
+        emit_update(room_id)
+
 @socketio.on('disconnect')
 def on_disconnect():
     for rid, game in rooms.items():
@@ -545,15 +571,6 @@ def on_disconnect():
                 game.remove_player(request.sid)
                 emit_update(rid)
                 return
-
-def emit_update(room_id):
-    if room_id not in rooms: return
-    game = rooms[room_id]
-    for p in game.players:
-        if p.get('is_cpu'): continue
-        # 【修正】バックグラウンドからの送信には socketio.emit を使用
-        state = game.get_public_state(p['sid'])
-        socketio.emit('update_state', state, room=p['sid'])
 
 if __name__ == '__main__':
     socketio.run(app, debug=True, port=5001)
