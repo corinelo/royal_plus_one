@@ -2,13 +2,20 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Royal +1 Online</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Roboto Mono', monospace; transition: background-color 0.5s ease; overflow: hidden; }
+        /* 高さ100dvhで固定し、スクロールを禁止 */
+        body { 
+            font-family: 'Roboto Mono', monospace; 
+            transition: background-color 0.5s ease; 
+            overflow: hidden; 
+            height: 100dvh; 
+            width: 100vw;
+        }
         .font-casino { font-family: 'Cinzel', serif; }
         .font-rank { font-family: sans-serif; font-weight: 800; }
         .bg-my-turn { background: radial-gradient(circle at center, #065f46 0%, #022c22 100%); }
@@ -16,130 +23,132 @@
 
         .card-base {
             background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
-            border-radius: 8px;
-            box-shadow: 2px 4px 8px rgba(0,0,0,0.3);
+            border-radius: 6px; /* 角丸を少し小さく */
+            box-shadow: 1px 2px 4px rgba(0,0,0,0.3);
             position: relative;
             overflow: hidden;
             border: 1px solid #e5e7eb;
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: transform 0.1s;
             user-select: none;
         }
-        .card:hover { transform: translateY(-12px) scale(1.02); z-index: 20; }
-        .card.selected { transform: translateY(-30px) scale(1.05) !important; z-index: 30; box-shadow: 0 0 15px rgba(250, 204, 21, 0.6); border-color: #facc15; }
+        /* スマホでの操作性向上のためホバーエフェクトは控えめに、選択時は明確に */
+        .card.selected { transform: translateY(-20px) scale(1.05) !important; z-index: 30; box-shadow: 0 0 10px rgba(250, 204, 21, 0.8); border-color: #facc15; }
+        
         .card-back {
-            background: repeating-linear-gradient(45deg, #b91c1c, #b91c1c 10px, #991b1b 10px, #991b1b 20px);
-            border: 2px solid #fff;
-            box-shadow: 1px 2px 5px rgba(0,0,0,0.5);
-            border-radius: 4px;
+            background: repeating-linear-gradient(45deg, #b91c1c, #b91c1c 5px, #991b1b 5px, #991b1b 10px);
+            border: 1px solid #fff;
+            border-radius: 3px;
         }
-        .hint-blue { box-shadow: 0 0 10px #3b82f6; border-color: #3b82f6; }
-        .hint-red { box-shadow: 0 0 10px #ef4444; border-color: #ef4444; }
+        .hint-blue { box-shadow: 0 0 8px #3b82f6; border-color: #3b82f6; }
+        .hint-red { box-shadow: 0 0 8px #ef4444; border-color: #ef4444; }
 
         .log-area { scrollbar-width: thin; scrollbar-color: #4b5563 #1f2937; }
-        .log-area::-webkit-scrollbar { width: 8px; }
+        .log-area::-webkit-scrollbar { width: 6px; }
         .log-area::-webkit-scrollbar-track { background: #1f2937; }
-        .log-area::-webkit-scrollbar-thumb { background-color: #4b5563; border-radius: 4px; }
+        .log-area::-webkit-scrollbar-thumb { background-color: #4b5563; border-radius: 3px; }
     </style>
 </head>
-<body class="bg-wait text-white min-h-screen flex flex-col">
+<body class="bg-wait text-white flex flex-col">
 
-    <div id="lobby-screen" class="absolute inset-0 z-50 flex items-center justify-center bg-black/90">
-        <div class="bg-gray-800 p-8 rounded-xl shadow-2xl border border-yellow-500/30 text-center max-w-md w-full">
-            <h1 class="text-4xl font-casino text-yellow-500 mb-6">Royal +1</h1>
+    <div id="lobby-screen" class="absolute inset-0 z-50 flex items-center justify-center bg-black/95 p-4">
+        <div class="bg-gray-800 p-6 rounded-xl shadow-2xl border border-yellow-500/30 text-center max-w-md w-full">
+            <h1 class="text-3xl font-casino text-yellow-500 mb-4">Royal +1</h1>
             <input type="text" id="username" placeholder="Your Name" class="w-full bg-gray-700 p-3 rounded mb-4 text-white border border-gray-600 focus:border-yellow-500 outline-none">
             
-            <div class="space-y-4">
-                <div class="border-b border-gray-600 pb-4">
+            <div class="space-y-3">
+                <div class="border-b border-gray-600 pb-3">
                     <button onclick="startPractice()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded transition shadow-lg border border-blue-400">
-                        PRACTICE MODE (vs CPU)
+                        PRACTICE (vs CPU)
                     </button>
-                    <p class="text-xs text-gray-400 mt-2">Play immediately against 3 bots.</p>
                 </div>
-                
                 <div>
-                    <input type="text" id="room-id" placeholder="Room ID (for Online)" class="w-full bg-gray-700 p-3 rounded mb-2 text-white border border-gray-600 focus:border-yellow-500 outline-none">
+                    <input type="text" id="room-id" placeholder="Room ID" class="w-full bg-gray-700 p-3 rounded mb-2 text-white border border-gray-600 focus:border-yellow-500 outline-none">
                     <button onclick="joinGame()" class="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-bold py-3 rounded transition shadow-lg">
-                        JOIN ONLINE GAME
+                        JOIN ONLINE
                     </button>
                 </div>
             </div>
-            
-            <div id="lobby-msg" class="text-red-400 mt-4 text-sm"></div>
+            <div id="lobby-msg" class="text-red-400 mt-2 text-sm"></div>
         </div>
     </div>
 
-    <div id="wait-screen" class="hidden absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/80">
-        <h2 class="text-3xl font-casino text-white mb-4">Waiting for players...</h2>
+    <div id="wait-screen" class="hidden absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/90 p-4">
+        <h2 class="text-2xl font-casino text-white mb-4">Waiting...</h2>
         <div id="player-list" class="flex gap-4 mb-8 flex-wrap justify-center"></div>
         <button id="btn-start" onclick="startGame()" class="bg-green-600 hover:bg-green-500 px-8 py-3 rounded font-bold hidden">START GAME</button>
         <div class="text-gray-400 mt-4 text-sm">Room: <span id="display-room-id" class="text-white font-mono"></span></div>
     </div>
 
-    <div id="game-screen" class="hidden flex-grow flex flex-row h-screen">
+    <div id="game-screen" class="hidden flex-grow flex flex-row h-full overflow-hidden">
         <div class="flex-grow flex flex-col relative h-full">
-            <div class="flex justify-between items-center p-4">
-                <div class="text-2xl text-yellow-500 font-casino">Royal +1 <span class="text-xs text-gray-500 ml-2" id="room-display"></span></div>
-                <button onclick="document.getElementById('rule-modal').classList.remove('hidden')" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs border border-gray-500">📖 RULES</button>
+            <div class="flex justify-between items-center px-4 py-2 z-10 bg-black/20">
+                <div class="text-xl text-yellow-500 font-casino">Royal +1 <span class="text-[10px] text-gray-400 ml-1" id="room-display"></span></div>
+                <div class="flex gap-2">
+                    <div class="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-full border border-white/10">
+                        <span class="text-[10px] text-gray-400">DECK</span>
+                        <span id="deck-count" class="text-sm font-bold font-mono">0</span>
+                    </div>
+                    <button onclick="document.getElementById('rule-modal').classList.remove('hidden')" class="bg-gray-700 text-white px-2 py-1 rounded text-[10px] border border-gray-500">RULES</button>
+                </div>
             </div>
 
-            <div id="opponents-area" class="flex justify-around items-start w-full px-4 mb-2"></div>
+            <div id="opponents-area" class="flex justify-around items-start w-full px-2 h-20 shrink-0"></div>
 
             <div class="flex-grow flex flex-col items-center justify-center relative">
-                <div class="absolute top-0 text-center opacity-80">
-                    <div class="text-[10px] tracking-[0.2em] uppercase text-yellow-200">Next Rank</div>
-                    <div id="target-rank" class="text-3xl font-casino font-bold text-white drop-shadow-lg">-</div>
+                <div class="absolute top-2 text-center opacity-80">
+                    <div class="text-[9px] tracking-[0.2em] uppercase text-yellow-200">Next</div>
+                    <div id="target-rank" class="text-2xl font-casino font-bold text-white drop-shadow-lg">-</div>
                 </div>
-                <div id="field-container" class="relative w-80 h-40 flex flex-col items-center justify-center">
-                    <div id="field-cards" class="flex -space-x-10 z-10"></div>
-                    <div id="field-owner-label" class="mt-4 opacity-0 transition-opacity duration-300 bg-black/50 px-3 py-1 rounded-full text-xs text-yellow-300 font-bold tracking-widest border border-yellow-500/30">Played by: -</div>
+                <div id="field-container" class="relative w-full h-32 flex flex-col items-center justify-center">
+                    <div id="field-cards" class="flex -space-x-8 z-10 scale-90 sm:scale-100"></div>
+                    <div id="field-owner-label" class="mt-2 opacity-0 transition-opacity bg-black/50 px-2 py-0.5 rounded-full text-[10px] text-yellow-300 font-bold border border-yellow-500/30">Played by: -</div>
                 </div>
             </div>
 
-            <div class="w-full relative pb-6">
-                <div class="absolute bottom-6 left-6 z-20 bg-gray-900/80 border border-yellow-500/30 p-4 rounded-xl min-w-[140px]">
-                    <div class="text-xs text-yellow-500 uppercase tracking-wider mb-1">Your Score</div>
-                    <div id="my-score" class="text-4xl font-mono font-bold text-white text-center">0</div>
-                    <div id="parent-badge" class="hidden text-center mt-1"><span class="bg-red-600 text-[10px] px-2 py-0.5 rounded text-white font-bold">DEALER</span></div>
+            <div class="w-full relative pb-2 sm:pb-4 shrink-0">
+                <div class="absolute bottom-16 left-2 z-20 bg-gray-900/80 border border-yellow-500/30 p-2 rounded-lg min-w-[80px] text-center">
+                    <div class="text-[9px] text-yellow-500 uppercase">Score</div>
+                    <div id="my-score" class="text-xl font-mono font-bold text-white">0</div>
+                    <div id="parent-badge" class="hidden text-center"><span class="bg-red-600 text-[8px] px-1 rounded text-white font-bold">DEALER</span></div>
                 </div>
-                <div id="my-hand" class="flex justify-center -space-x-8 mb-8 px-10 min-h-[140px] items-end"></div>
-                <div class="flex justify-center gap-6 h-16">
-                    <button id="btn-play" onclick="playCards()" class="hidden bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-12 rounded-full shadow-lg border border-blue-400">PLAY</button>
-                    <button id="btn-pass" onclick="passTurn()" class="bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold py-3 px-12 rounded-full shadow-lg border border-gray-600">PASS</button>
+
+                <div id="my-hand" class="flex justify-center -space-x-6 sm:-space-x-8 px-4 h-24 sm:h-28 items-end mb-2"></div>
+
+                <div class="flex justify-center gap-4 h-12 mb-2 sm:mb-0">
+                    <button id="btn-play" onclick="playCards()" class="hidden bg-blue-600 active:bg-blue-400 text-white font-bold py-2 px-8 rounded-full shadow-lg border border-blue-400 text-sm tracking-widest">PLAY</button>
+                    <button id="btn-pass" onclick="passTurn()" class="bg-gray-700 active:bg-gray-500 text-gray-300 font-bold py-2 px-8 rounded-full shadow-lg border border-gray-600 text-sm tracking-widest">PASS</button>
                 </div>
             </div>
         </div>
 
-        <div class="w-64 bg-gray-900 border-l border-gray-700 flex flex-col hidden sm:flex">
-            <div class="p-4 border-b border-gray-700 bg-gray-800"><h2 class="text-sm font-bold text-gray-400 uppercase">Game Log</h2></div>
-            <div id="game-log" class="flex-grow p-4 overflow-y-auto log-area space-y-2 text-xs font-mono text-gray-300"></div>
+        <div class="w-48 bg-gray-900 border-l border-gray-700 flex flex-col hidden sm:flex">
+            <div class="p-2 border-b border-gray-700 bg-gray-800"><h2 class="text-xs font-bold text-gray-400">LOG</h2></div>
+            <div id="game-log" class="flex-grow p-2 overflow-y-auto log-area space-y-1 text-[10px] font-mono text-gray-300"></div>
         </div>
     </div>
 
     <div id="rule-modal" class="fixed inset-0 bg-black/90 z-[60] hidden flex items-center justify-center p-4" onclick="this.classList.add('hidden')">
-        <div class="bg-gray-800 text-gray-200 p-6 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto border border-yellow-500/30 shadow-2xl" onclick="event.stopPropagation()">
-            <h2 class="text-2xl font-casino text-yellow-500 mb-4 border-b border-gray-600 pb-2">Rulebook</h2>
-            <div class="space-y-4 text-sm font-sans leading-relaxed">
-                <h3 class="font-bold text-yellow-200 text-lg">1. The Core Rule (+1)</h3>
-                <p>You can only play a card with a rank <strong>exactly 1 higher</strong> than the field.<br>(e.g., Field 5 -> You play 6)</p>
-                <h3 class="font-bold text-yellow-200 text-lg">2. Special Cards</h3>
+        <div class="bg-gray-800 text-gray-200 p-6 rounded-lg max-w-lg w-full max-h-[80vh] overflow-y-auto border border-yellow-500/30" onclick="event.stopPropagation()">
+            <h2 class="text-xl font-casino text-yellow-500 mb-2 border-b border-gray-600 pb-2">Rules</h2>
+            <div class="space-y-3 text-xs sm:text-sm font-sans">
+                <p><strong>Core Rule:</strong> Play cards exactly <strong>Rank +1</strong> higher.<br>(Field 5 -> Play 6)</p>
                 <ul class="list-disc list-inside ml-2">
-                    <li><strong>2 (The Two):</strong> Strongest Single. Plays anytime on Single. Clears field.</li>
-                    <li><strong>8 (Eight Cut):</strong> Clears field immediately.</li>
+                    <li><strong>2:</strong> Strongest Single. Plays anytime on Single. Clears field.</li>
+                    <li><strong>8:</strong> Clears field immediately.</li>
                     <li><strong>JOKER:</strong> Wildcard.</li>
                 </ul>
-                <h3 class="font-bold text-yellow-200 text-lg">3. Draw Rule</h3>
-                <p>When the field is cleared (everyone passes or special card), <strong>everyone draws 1 card</strong>.</p>
+                <p><strong>Draw:</strong> When field clears, everyone draws 1 card.</p>
             </div>
-            <div class="mt-6 text-center">
-                <button onclick="document.getElementById('rule-modal').classList.add('hidden')" class="bg-yellow-600 hover:bg-yellow-500 text-black font-bold py-2 px-8 rounded-full">CLOSE</button>
+            <div class="mt-4 text-center">
+                <button onclick="document.getElementById('rule-modal').classList.add('hidden')" class="bg-yellow-600 text-black font-bold py-2 px-6 rounded-full text-sm">CLOSE</button>
             </div>
         </div>
     </div>
 
     <div id="modal-overlay" class="fixed inset-0 bg-black/95 z-50 hidden flex flex-col items-center justify-center">
-        <h2 class="text-6xl font-casino text-yellow-400 mb-8">FINISH!!</h2>
-        <div id="modal-scores" class="w-full max-w-md bg-gray-900 p-6 rounded-lg mb-8"></div>
-        <button onclick="reqNextGame()" class="bg-white text-black font-bold py-4 px-12 rounded-full hover:bg-yellow-400 text-xl shadow-lg">NEXT GAME</button>
+        <h2 class="text-5xl font-casino text-yellow-400 mb-6">FINISH!!</h2>
+        <div id="modal-scores" class="w-full max-w-sm bg-gray-900 p-4 rounded-lg mb-6"></div>
+        <button onclick="reqNextGame()" class="bg-white text-black font-bold py-3 px-8 rounded-full hover:bg-yellow-400 text-lg">NEXT GAME</button>
     </div>
 
 <script>
@@ -162,7 +171,6 @@
     function startPractice() {
         const name = document.getElementById('username').value || "Player";
         myName = name;
-        // 練習モード開始イベント
         socket.emit('start_practice', {name: name});
     }
 
@@ -174,7 +182,6 @@
 
     socket.on('update_state', (state) => {
         gameState = state;
-        // 練習モードの場合、サーバー側で自動生成されたroom_idを使うので更新
         if(state.room_id) currentRoom = state.room_id;
 
         document.getElementById('lobby-screen').classList.add('hidden');
@@ -193,17 +200,14 @@
         document.getElementById('display-room-id').innerText = currentRoom;
         const list = document.getElementById('player-list');
         list.innerHTML = state.players.map(p => `
-            <div class="bg-gray-800 p-4 rounded text-center border border-gray-600 min-w-[100px]">
-                <div class="text-2xl">${p.is_cpu ? '🤖' : '👤'}</div>
-                <div class="font-bold text-sm mt-2">${p.name}</div>
+            <div class="bg-gray-800 p-3 rounded text-center border border-gray-600 min-w-[80px]">
+                <div class="text-xl">${p.is_cpu ? '🤖' : '👤'}</div>
+                <div class="font-bold text-xs mt-1 truncate w-16 mx-auto">${p.name}</div>
             </div>
         `).join('');
         
-        if(state.players.length >= 2) {
-            document.getElementById('btn-start').classList.remove('hidden');
-        } else {
-            document.getElementById('btn-start').classList.add('hidden');
-        }
+        if(state.players.length >= 2) document.getElementById('btn-start').classList.remove('hidden');
+        else document.getElementById('btn-start').classList.add('hidden');
     }
 
     function getRankName(r) {
@@ -213,9 +217,11 @@
 
     function renderGame(state) {
         document.getElementById('room-display').innerText = `Room: ${currentRoom}`;
+        document.getElementById('deck-count').innerText = state.deck_count;
         const isMyTurn = (state.turn === state.my_idx);
-        document.body.className = isMyTurn ? 'bg-my-turn text-white min-h-screen flex flex-col' : 'bg-wait text-white min-h-screen flex flex-col';
+        document.body.className = isMyTurn ? 'bg-my-turn text-white flex flex-col h-[100dvh]' : 'bg-wait text-white flex flex-col h-[100dvh]';
 
+        // ログ (PCのみ表示)
         const logArea = document.getElementById('game-log');
         logArea.innerHTML = [...state.logs].reverse().map(log => {
             const color = log.includes(myName) || log.includes("YOU") ? "text-yellow-400" : "text-gray-400";
@@ -223,6 +229,7 @@
         }).join('');
         logArea.scrollTop = 0;
 
+        // 他プレイヤー
         const oppArea = document.getElementById('opponents-area');
         oppArea.innerHTML = state.players.filter(p => !p.is_me).map(p => {
             const isTurn = (state.turn === p.id);
@@ -230,23 +237,25 @@
             let handHTML = '';
             for(let i=0; i<p.hand_count; i++) {
                 if(i>=10) break; 
-                handHTML += `<div class="card-back absolute w-6 h-10" style="left:${i*10}px; top:0;"></div>`;
+                // カードを小さく、重ねる
+                handHTML += `<div class="card-back absolute w-5 h-8 sm:w-6 sm:h-10" style="left:${i*8}px; top:0;"></div>`;
             }
             return `
                 <div class="flex flex-col items-center transition-all ${isTurn ? 'scale-110 opacity-100' : 'opacity-60'}">
-                    <div class="relative w-12 h-12 mb-1">
-                        <div class="w-12 h-12 rounded-full bg-gray-700 border-2 ${isTurn ? 'border-yellow-400 shadow-[0_0_10px_gold]' : 'border-gray-500'} flex items-center justify-center relative">
-                            <span>${p.is_cpu ? '🤖' : '👤'}</span>
-                            ${isParent ? '<span class="absolute -top-1 -right-1 text-xs">👑</span>' : ''}
+                    <div class="relative w-10 h-10 sm:w-12 sm:h-12 mb-1">
+                        <div class="w-full h-full rounded-full bg-gray-700 border-2 ${isTurn ? 'border-yellow-400 shadow-[0_0_10px_gold]' : 'border-gray-500'} flex items-center justify-center relative">
+                            <span class="text-lg">${p.is_cpu ? '🤖' : '👤'}</span>
+                            ${isParent ? '<span class="absolute -top-1 -right-1 text-[10px]">👑</span>' : ''}
                         </div>
-                        <div class="absolute -bottom-2 w-full text-center"><span class="bg-black text-[9px] px-1 rounded truncate w-16 block mx-auto">${p.name}</span></div>
+                        <div class="absolute -bottom-2 w-full text-center"><span class="bg-black text-[8px] px-1 rounded truncate w-14 block mx-auto">${p.name}</span></div>
                     </div>
-                    <div class="relative h-10 mt-1 w-24">${handHTML}</div>
-                    <div class="text-[10px] text-gray-400">Score: ${p.score}</div>
+                    <div class="relative h-8 sm:h-10 mt-1 w-20">${handHTML}</div>
+                    <div class="text-[9px] text-gray-400">Score: ${p.score}</div>
                 </div>
             `;
         }).join('');
 
+        // フィールド
         const fieldDiv = document.getElementById('field-cards');
         fieldDiv.innerHTML = state.field.map((c, i) => renderCard(c, false, i)).join('');
         
@@ -259,6 +268,7 @@
             ownerLabel.classList.add('opacity-0');
         }
 
+        // Target Rank
         let targetText = "ANY";
         let nextRankVal = -1;
         if(state.field.length > 0) {
@@ -266,13 +276,13 @@
             const SORT_MAP = {3:0,4:1,5:2,6:3,7:4,8:5,9:6,10:7,11:8,12:9,13:10,14:11,15:12,99:13};
             valid.sort((a,b) => SORT_MAP[a] - SORT_MAP[b]);
             const cur = valid.length>0 ? valid[valid.length-1] : 99;
-            
             if(cur===99) targetText="FREE";
             else if(cur===15) targetText="MAX";
             else { nextRankVal=cur+1; targetText=getRankName(nextRankVal); }
         }
         document.getElementById('target-rank').innerText = targetText;
 
+        // 手札
         document.getElementById('my-score').innerText = state.my_score;
         if(state.parent === state.my_idx) document.getElementById('parent-badge').classList.remove('hidden');
         else document.getElementById('parent-badge').classList.add('hidden');
@@ -288,11 +298,13 @@
                 else if(targetText==="FREE") isPlayable = true;
             }
             
-            let classes = `card-base w-20 h-28 flex flex-col items-center justify-center cursor-pointer `;
+            // 手札カードサイズ調整 (スマホ用)
+            let classes = `card-base w-14 h-20 sm:w-16 sm:h-24 flex flex-col items-center justify-center cursor-pointer `;
             if(isSel) classes += "selected ";
             else if(isPlayable) classes += "hint-blue ";
             
-            const style = `margin-left: -20px; z-index:${i}; transform: rotate(${(i-state.my_hand.length/2)*3}deg) translateY(${isSel?-30:0}px);`;
+            // 扇状に配置
+            const style = `margin-left: -16px; z-index:${i}; transform: rotate(${(i-state.my_hand.length/2)*2.5}deg) translateY(${isSel?-20:0}px);`;
 
             return `<div onclick="toggle(${i})" class="${classes}" style="${style}">
                 <div class="card-pattern"></div>
@@ -301,6 +313,7 @@
             </div>`;
         }).join('');
 
+        // ボタン
         const pBtn = document.getElementById('btn-play');
         const passBtn = document.getElementById('btn-pass');
         if(isMyTurn) {
@@ -312,6 +325,7 @@
             passBtn.disabled = true; passBtn.classList.add('opacity-50');
         }
 
+        // モーダル
         if(state.game_over) {
             document.getElementById('modal-overlay').classList.remove('hidden');
             document.getElementById('modal-overlay').classList.add('flex');
@@ -328,7 +342,8 @@
     }
 
     function renderCard(c, large, idx) {
-        return `<div class="card-base w-16 h-24 flex flex-col items-center justify-center" style="margin-left:${idx===0?0:-30}px; z-index:${idx}; transform: rotate(${(Math.random()-0.5)*10}deg);">
+        // フィールドカードサイズ調整
+        return `<div class="card-base w-12 h-16 sm:w-14 sm:h-20 flex flex-col items-center justify-center" style="margin-left:${idx===0?0:-20}px; z-index:${idx}; transform: rotate(${(Math.random()-0.5)*10}deg);">
             <div class="card-inner-border"></div>
             ${renderCardContent(c, true)}
         </div>`;
@@ -337,10 +352,11 @@
     function renderCardContent(c, small=false) {
         const isRed = (c.suit==='♥'||c.suit==='♦');
         const color = isRed ? 'text-red-600' : 'text-gray-900';
+        // フォントサイズ微調整
         return `
             <div class="${color} font-bold flex flex-col items-center leading-none z-10">
-                <span class="font-rank ${small?'text-lg':'text-2xl'}">${getRankName(c.rank)}</span>
-                <span class="${small?'text-2xl':'text-4xl'}">${SUITS[c.suit]}</span>
+                <span class="font-rank text-lg sm:text-2xl">${getRankName(c.rank)}</span>
+                <span class="text-xl sm:text-3xl">${SUITS[c.suit]}</span>
             </div>
         `;
     }
