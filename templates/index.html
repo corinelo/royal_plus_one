@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Royal +1 Online</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Roboto Mono', monospace; transition: background-color 0.5s ease; overflow: hidden; }
+        .font-casino { font-family: 'Cinzel', serif; }
+        .font-rank { font-family: sans-serif; font-weight: 800; }
+        .bg-my-turn { background: radial-gradient(circle at center, #065f46 0%, #022c22 100%); }
+        .bg-wait { background: radial-gradient(circle at center, #1e293b 0%, #020617 100%); }
+
+        .card-base {
+            background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
+            border-radius: 8px;
+            box-shadow: 2px 4px 8px rgba(0,0,0,0.3);
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
+            transition: transform 0.2s, box-shadow 0.2s;
+            user-select: none;
+        }
+        .card:hover { transform: translateY(-12px) scale(1.02); z-index: 20; }
+        .card.selected { transform: translateY(-30px) scale(1.05) !important; z-index: 30; box-shadow: 0 0 15px rgba(250, 204, 21, 0.6); border-color: #facc15; }
+        .card-back {
+            background: repeating-linear-gradient(45deg, #b91c1c, #b91c1c 10px, #991b1b 10px, #991b1b 20px);
+            border: 2px solid #fff;
+            box-shadow: 1px 2px 5px rgba(0,0,0,0.5);
+            border-radius: 4px;
+        }
+        .hint-blue { box-shadow: 0 0 10px #3b82f6; border-color: #3b82f6; }
+        .hint-red { box-shadow: 0 0 10px #ef4444; border-color: #ef4444; }
+
+        .log-area { scrollbar-width: thin; scrollbar-color: #4b5563 #1f2937; }
+        .log-area::-webkit-scrollbar { width: 8px; }
+        .log-area::-webkit-scrollbar-track { background: #1f2937; }
+        .log-area::-webkit-scrollbar-thumb { background-color: #4b5563; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-wait text-white min-h-screen flex flex-col">
+
+    <div id="lobby-screen" class="absolute inset-0 z-50 flex items-center justify-center bg-black/90">
+        <div class="bg-gray-800 p-8 rounded-xl shadow-2xl border border-yellow-500/30 text-center max-w-md w-full">
+            <h1 class="text-4xl font-casino text-yellow-500 mb-6">Royal +1</h1>
+            <input type="text" id="username" placeholder="Your Name" class="w-full bg-gray-700 p-3 rounded mb-4 text-white border border-gray-600 focus:border-yellow-500 outline-none">
+            
+            <div class="space-y-4">
+                <div class="border-b border-gray-600 pb-4">
+                    <button onclick="startPractice()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded transition shadow-lg border border-blue-400">
+                        PRACTICE MODE (vs CPU)
+                    </button>
+                    <p class="text-xs text-gray-400 mt-2">Play immediately against 3 bots.</p>
+                </div>
+                
+                <div>
+                    <input type="text" id="room-id" placeholder="Room ID (for Online)" class="w-full bg-gray-700 p-3 rounded mb-2 text-white border border-gray-600 focus:border-yellow-500 outline-none">
+                    <button onclick="joinGame()" class="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-bold py-3 rounded transition shadow-lg">
+                        JOIN ONLINE GAME
+                    </button>
+                </div>
+            </div>
+            
+            <div id="lobby-msg" class="text-red-400 mt-4 text-sm"></div>
+        </div>
+    </div>
+
+    <div id="wait-screen" class="hidden absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/80">
+        <h2 class="text-3xl font-casino text-white mb-4">Waiting for players...</h2>
+        <div id="player-list" class="flex gap-4 mb-8 flex-wrap justify-center"></div>
+        <button id="btn-start" onclick="startGame()" class="bg-green-600 hover:bg-green-500 px-8 py-3 rounded font-bold hidden">START GAME</button>
+        <div class="text-gray-400 mt-4 text-sm">Room: <span id="display-room-id" class="text-white font-mono"></span></div>
+    </div>
+
+    <div id="game-screen" class="hidden flex-grow flex flex-row h-screen">
+        <div class="flex-grow flex flex-col relative h-full">
+            <div class="flex justify-between items-center p-4">
+                <div class="text-2xl text-yellow-500 font-casino">Royal +1 <span class="text-xs text-gray-500 ml-2" id="room-display"></span></div>
+                <button onclick="document.getElementById('rule-modal').classList.remove('hidden')" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs border border-gray-500">📖 RULES</button>
+            </div>
+
+            <div id="opponents-area" class="flex justify-around items-start w-full px-4 mb-2"></div>
+
+            <div class="flex-grow flex flex-col items-center justify-center relative">
+                <div class="absolute top-0 text-center opacity-80">
+                    <div class="text-[10px] tracking-[0.2em] uppercase text-yellow-200">Next Rank</div>
+                    <div id="target-rank" class="text-3xl font-casino font-bold text-white drop-shadow-lg">-</div>
+                </div>
+                <div id="field-container" class="relative w-80 h-40 flex flex-col items-center justify-center">
+                    <div id="field-cards" class="flex -space-x-10 z-10"></div>
+                    <div id="field-owner-label" class="mt-4 opacity-0 transition-opacity duration-300 bg-black/50 px-3 py-1 rounded-full text-xs text-yellow-300 font-bold tracking-widest border border-yellow-500/30">Played by: -</div>
+                </div>
+            </div>
+
+            <div class="w-full relative pb-6">
+                <div class="absolute bottom-6 left-6 z-20 bg-gray-900/80 border border-yellow-500/30 p-4 rounded-xl min-w-[140px]">
+                    <div class="text-xs text-yellow-500 uppercase tracking-wider mb-1">Your Score</div>
+                    <div id="my-score" class="text-4xl font-mono font-bold text-white text-center">0</div>
+                    <div id="parent-badge" class="hidden text-center mt-1"><span class="bg-red-600 text-[10px] px-2 py-0.5 rounded text-white font-bold">DEALER</span></div>
+                </div>
+                <div id="my-hand" class="flex justify-center -space-x-8 mb-8 px-10 min-h-[140px] items-end"></div>
+                <div class="flex justify-center gap-6 h-16">
+                    <button id="btn-play" onclick="playCards()" class="hidden bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-12 rounded-full shadow-lg border border-blue-400">PLAY</button>
+                    <button id="btn-pass" onclick="passTurn()" class="bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold py-3 px-12 rounded-full shadow-lg border border-gray-600">PASS</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="w-64 bg-gray-900 border-l border-gray-700 flex flex-col hidden sm:flex">
+            <div class="p-4 border-b border-gray-700 bg-gray-800"><h2 class="text-sm font-bold text-gray-400 uppercase">Game Log</h2></div>
+            <div id="game-log" class="flex-grow p-4 overflow-y-auto log-area space-y-2 text-xs font-mono text-gray-300"></div>
+        </div>
+    </div>
+
+    <div id="rule-modal" class="fixed inset-0 bg-black/90 z-[60] hidden flex items-center justify-center p-4" onclick="this.classList.add('hidden')">
+        <div class="bg-gray-800 text-gray-200 p-6 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto border border-yellow-500/30 shadow-2xl" onclick="event.stopPropagation()">
+            <h2 class="text-2xl font-casino text-yellow-500 mb-4 border-b border-gray-600 pb-2">Rulebook</h2>
+            <div class="space-y-4 text-sm font-sans leading-relaxed">
+                <h3 class="font-bold text-yellow-200 text-lg">1. The Core Rule (+1)</h3>
+                <p>You can only play a card with a rank <strong>exactly 1 higher</strong> than the field.<br>(e.g., Field 5 -> You play 6)</p>
+                <h3 class="font-bold text-yellow-200 text-lg">2. Special Cards</h3>
+                <ul class="list-disc list-inside ml-2">
+                    <li><strong>2 (The Two):</strong> Strongest Single. Plays anytime on Single. Clears field.</li>
+                    <li><strong>8 (Eight Cut):</strong> Clears field immediately.</li>
+                    <li><strong>JOKER:</strong> Wildcard.</li>
+                </ul>
+                <h3 class="font-bold text-yellow-200 text-lg">3. Draw Rule</h3>
+                <p>When the field is cleared (everyone passes or special card), <strong>everyone draws 1 card</strong>.</p>
+            </div>
+            <div class="mt-6 text-center">
+                <button onclick="document.getElementById('rule-modal').classList.add('hidden')" class="bg-yellow-600 hover:bg-yellow-500 text-black font-bold py-2 px-8 rounded-full">CLOSE</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-overlay" class="fixed inset-0 bg-black/95 z-50 hidden flex flex-col items-center justify-center">
+        <h2 class="text-6xl font-casino text-yellow-400 mb-8">FINISH!!</h2>
+        <div id="modal-scores" class="w-full max-w-md bg-gray-900 p-6 rounded-lg mb-8"></div>
+        <button onclick="reqNextGame()" class="bg-white text-black font-bold py-4 px-12 rounded-full hover:bg-yellow-400 text-xl shadow-lg">NEXT GAME</button>
+    </div>
+
+<script>
+    const socket = io();
+    let currentRoom = "";
+    let myName = "";
+    let gameState = {};
+    let selectedIndices = [];
+    const SUITS = {'♠':'♠', '♥':'♥', '♦':'♦', '♣':'♣', 'JK':'🤡'};
+
+    function joinGame() {
+        const name = document.getElementById('username').value || "Guest";
+        const room = document.getElementById('room-id').value;
+        if(!room) { alert("Please enter Room ID"); return; }
+        myName = name;
+        currentRoom = room;
+        socket.emit('join_game', {room: room, name: name});
+    }
+
+    function startPractice() {
+        const name = document.getElementById('username').value || "Player";
+        myName = name;
+        // 練習モード開始イベント
+        socket.emit('start_practice', {name: name});
+    }
+
+    function startGame() {
+        socket.emit('start_game', {room: currentRoom});
+    }
+
+    socket.on('error', (data) => { alert(data.msg); });
+
+    socket.on('update_state', (state) => {
+        gameState = state;
+        // 練習モードの場合、サーバー側で自動生成されたroom_idを使うので更新
+        if(state.room_id) currentRoom = state.room_id;
+
+        document.getElementById('lobby-screen').classList.add('hidden');
+        if(!state.game_started) {
+            document.getElementById('wait-screen').classList.remove('hidden');
+            document.getElementById('game-screen').classList.add('hidden');
+            updateLobby(state);
+        } else {
+            document.getElementById('wait-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.remove('hidden');
+            renderGame(state);
+        }
+    });
+
+    function updateLobby(state) {
+        document.getElementById('display-room-id').innerText = currentRoom;
+        const list = document.getElementById('player-list');
+        list.innerHTML = state.players.map(p => `
+            <div class="bg-gray-800 p-4 rounded text-center border border-gray-600 min-w-[100px]">
+                <div class="text-2xl">${p.is_cpu ? '🤖' : '👤'}</div>
+                <div class="font-bold text-sm mt-2">${p.name}</div>
+            </div>
+        `).join('');
+        
+        if(state.players.length >= 2) {
+            document.getElementById('btn-start').classList.remove('hidden');
+        } else {
+            document.getElementById('btn-start').classList.add('hidden');
+        }
+    }
+
+    function getRankName(r) {
+        if(r===11)return'J'; if(r===12)return'Q'; if(r===13)return'K'; if(r===14)return'A'; if(r===15)return'2'; if(r===99)return'JK';
+        return r;
+    }
+
+    function renderGame(state) {
+        document.getElementById('room-display').innerText = `Room: ${currentRoom}`;
+        const isMyTurn = (state.turn === state.my_idx);
+        document.body.className = isMyTurn ? 'bg-my-turn text-white min-h-screen flex flex-col' : 'bg-wait text-white min-h-screen flex flex-col';
+
+        const logArea = document.getElementById('game-log');
+        logArea.innerHTML = [...state.logs].reverse().map(log => {
+            const color = log.includes(myName) || log.includes("YOU") ? "text-yellow-400" : "text-gray-400";
+            return `<div class="${color} border-b border-gray-800 pb-1 mb-1">${log}</div>`;
+        }).join('');
+        logArea.scrollTop = 0;
+
+        const oppArea = document.getElementById('opponents-area');
+        oppArea.innerHTML = state.players.filter(p => !p.is_me).map(p => {
+            const isTurn = (state.turn === p.id);
+            const isParent = (state.parent === p.id);
+            let handHTML = '';
+            for(let i=0; i<p.hand_count; i++) {
+                if(i>=10) break; 
+                handHTML += `<div class="card-back absolute w-6 h-10" style="left:${i*10}px; top:0;"></div>`;
+            }
+            return `
+                <div class="flex flex-col items-center transition-all ${isTurn ? 'scale-110 opacity-100' : 'opacity-60'}">
+                    <div class="relative w-12 h-12 mb-1">
+                        <div class="w-12 h-12 rounded-full bg-gray-700 border-2 ${isTurn ? 'border-yellow-400 shadow-[0_0_10px_gold]' : 'border-gray-500'} flex items-center justify-center relative">
+                            <span>${p.is_cpu ? '🤖' : '👤'}</span>
+                            ${isParent ? '<span class="absolute -top-1 -right-1 text-xs">👑</span>' : ''}
+                        </div>
+                        <div class="absolute -bottom-2 w-full text-center"><span class="bg-black text-[9px] px-1 rounded truncate w-16 block mx-auto">${p.name}</span></div>
+                    </div>
+                    <div class="relative h-10 mt-1 w-24">${handHTML}</div>
+                    <div class="text-[10px] text-gray-400">Score: ${p.score}</div>
+                </div>
+            `;
+        }).join('');
+
+        const fieldDiv = document.getElementById('field-cards');
+        fieldDiv.innerHTML = state.field.map((c, i) => renderCard(c, false, i)).join('');
+        
+        const ownerLabel = document.getElementById('field-owner-label');
+        if(state.field.length > 0 && state.field_owner !== null) {
+            ownerLabel.classList.remove('opacity-0');
+            const owner = state.players.find(p => p.id === state.field_owner);
+            ownerLabel.innerText = "Played by: " + (owner ? owner.name : "?");
+        } else {
+            ownerLabel.classList.add('opacity-0');
+        }
+
+        let targetText = "ANY";
+        let nextRankVal = -1;
+        if(state.field.length > 0) {
+            const valid = state.field.filter(c=>c.rank!==99).map(c=>c.rank);
+            const SORT_MAP = {3:0,4:1,5:2,6:3,7:4,8:5,9:6,10:7,11:8,12:9,13:10,14:11,15:12,99:13};
+            valid.sort((a,b) => SORT_MAP[a] - SORT_MAP[b]);
+            const cur = valid.length>0 ? valid[valid.length-1] : 99;
+            
+            if(cur===99) targetText="FREE";
+            else if(cur===15) targetText="MAX";
+            else { nextRankVal=cur+1; targetText=getRankName(nextRankVal); }
+        }
+        document.getElementById('target-rank').innerText = targetText;
+
+        document.getElementById('my-score').innerText = state.my_score;
+        if(state.parent === state.my_idx) document.getElementById('parent-badge').classList.remove('hidden');
+        else document.getElementById('parent-badge').classList.add('hidden');
+
+        const handDiv = document.getElementById('my-hand');
+        handDiv.innerHTML = state.my_hand.map((c, i) => {
+            const isSel = selectedIndices.includes(i);
+            let isPlayable = false;
+            if(isMyTurn) {
+                if(c.rank === 15 && state.field.length <= 1) isPlayable = true;
+                else if(state.field.length===0) isPlayable = (c.rank!==99);
+                else if(nextRankVal !== -1) isPlayable = (c.rank===nextRankVal || c.rank===99);
+                else if(targetText==="FREE") isPlayable = true;
+            }
+            
+            let classes = `card-base w-20 h-28 flex flex-col items-center justify-center cursor-pointer `;
+            if(isSel) classes += "selected ";
+            else if(isPlayable) classes += "hint-blue ";
+            
+            const style = `margin-left: -20px; z-index:${i}; transform: rotate(${(i-state.my_hand.length/2)*3}deg) translateY(${isSel?-30:0}px);`;
+
+            return `<div onclick="toggle(${i})" class="${classes}" style="${style}">
+                <div class="card-pattern"></div>
+                <div class="card-inner-border"></div>
+                ${renderCardContent(c)}
+            </div>`;
+        }).join('');
+
+        const pBtn = document.getElementById('btn-play');
+        const passBtn = document.getElementById('btn-pass');
+        if(isMyTurn) {
+            passBtn.disabled = false; passBtn.classList.remove('opacity-50');
+            if(selectedIndices.length > 0) pBtn.classList.remove('hidden');
+            else pBtn.classList.add('hidden');
+        } else {
+            pBtn.classList.add('hidden');
+            passBtn.disabled = true; passBtn.classList.add('opacity-50');
+        }
+
+        if(state.game_over) {
+            document.getElementById('modal-overlay').classList.remove('hidden');
+            document.getElementById('modal-overlay').classList.add('flex');
+            document.getElementById('modal-scores').innerHTML = state.players.map(p => `
+                <div class="flex justify-between items-center py-2 border-b border-gray-700 text-white">
+                    <span>${p.name} ${state.parent===p.id?'👑':''}</span>
+                    <span class="font-mono text-xl">${p.score}</span>
+                </div>
+            `).join('');
+        } else {
+            document.getElementById('modal-overlay').classList.add('hidden');
+            document.getElementById('modal-overlay').classList.remove('flex');
+        }
+    }
+
+    function renderCard(c, large, idx) {
+        return `<div class="card-base w-16 h-24 flex flex-col items-center justify-center" style="margin-left:${idx===0?0:-30}px; z-index:${idx}; transform: rotate(${(Math.random()-0.5)*10}deg);">
+            <div class="card-inner-border"></div>
+            ${renderCardContent(c, true)}
+        </div>`;
+    }
+
+    function renderCardContent(c, small=false) {
+        const isRed = (c.suit==='♥'||c.suit==='♦');
+        const color = isRed ? 'text-red-600' : 'text-gray-900';
+        return `
+            <div class="${color} font-bold flex flex-col items-center leading-none z-10">
+                <span class="font-rank ${small?'text-lg':'text-2xl'}">${getRankName(c.rank)}</span>
+                <span class="${small?'text-2xl':'text-4xl'}">${SUITS[c.suit]}</span>
+            </div>
+        `;
+    }
+
+    function toggle(i) {
+        if(gameState.turn !== gameState.my_idx) return;
+        const idx = selectedIndices.indexOf(i);
+        if(idx>-1) selectedIndices.splice(idx,1); else selectedIndices.push(i);
+        renderGame(gameState); 
+    }
+
+    function playCards() {
+        socket.emit('play_card', {room: currentRoom, indices: selectedIndices});
+        selectedIndices = [];
+    }
+    function passTurn() {
+        socket.emit('pass_turn', {room: currentRoom});
+        selectedIndices = [];
+    }
+    function reqNextGame() {
+        socket.emit('next_game', {room: currentRoom});
+    }
+</script>
+</body>
+</html>
