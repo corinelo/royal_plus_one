@@ -3,7 +3,7 @@ import math
 import random
 import threading
 import traceback
-from itertools import combinations
+from itertools import chain, combinations
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import eventlet
@@ -12,7 +12,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app, async_mode='eventlet', cors_allowed_origins='*')
 
-# --- グローバル変数 & ヘルパー関数 ---
+# --- グローバル変数 & ヘルパー ---
 rooms = {}
 
 def emit_update(room_id):
@@ -26,10 +26,8 @@ def emit_update(room_id):
 @socketio.on('send_stamp')
 def on_stamp(data):
     room_id = data['room']
-    stamp_id = data['stamp_id']
     if room_id in rooms:
-        # 自分以外の全員（+自分）に送る
-        socketio.emit('receive_stamp', {'sid': request.sid, 'stamp_id': stamp_id}, room=room_id)
+        socketio.emit('receive_stamp', {'sid': request.sid, 'stamp_id': data['stamp_id']}, room=room_id)
 
 # --- ゲーム定数 ---
 SUITS = ['♠', '♥', '♦', '♣']
@@ -58,17 +56,11 @@ class GameState:
 
     def add_player(self, sid, name, is_cpu=False):
         if len(self.players) >= self.max_players: return False
-        pid = len(self.players)
         self.players.append({
-            "sid": sid,
-            "name": name,
-            "hand": [],
-            "score": 0,
-            "id": pid,
-            "is_cpu": is_cpu
+            "sid": sid, "name": name, "hand": [], "score": 0,
+            "id": len(self.players), "is_cpu": is_cpu
         })
-        if not is_cpu:
-            self.add_log(f"👋 {name} joined.")
+        if not is_cpu: self.add_log(f"👋 {name} joined.")
         return True
 
     def remove_player(self, sid):
@@ -77,6 +69,7 @@ class GameState:
 
     def start_game(self):
         with self.lock:
+            # 練習モードなら人数チェック緩和
             if len(self.players) < 2: return False
             self.game_started = True
             self.game_over = False
@@ -97,16 +90,12 @@ class GameState:
         self.deck.append({"suit": "JK", "rank": 99})
         random.shuffle(self.deck)
 
-        for p in self.players:
-            p["hand"] = []
-        
+        for p in self.players: p["hand"] = []
         for _ in range(5):
             for i in range(self.num_players):
-                if self.deck:
-                    self.players[i]["hand"].append(self.deck.pop())
+                if self.deck: self.players[i]["hand"].append(self.deck.pop())
 
-        for p in self.players:
-            self.sort_hand(p["hand"])
+        for p in self.players: self.sort_hand(p["hand"])
 
         self.field = []
         self.field_type = None
@@ -119,24 +108,16 @@ class GameState:
         
         dealer = self.players[self.parent_idx]
         self.add_log(f"--- Game Start (Dealer: {dealer['name']}) ---")
-        self.add_log(f"Deck remaining: {len(self.deck)}")
-
+        
+        # 親がCPUなら思考開始
         if dealer.get('is_cpu'):
             socketio.start_background_task(self.run_cpu_turn, dealer['sid'])
 
-    def get_player_name(self, idx):
-        return self.players[idx]['name']
-
-    def add_log(self, message):
-        self.logs.append(message)
-
-    def sort_hand(self, hand):
-        hand.sort(key=lambda x: (SORT_MAP.get(x["rank"], 99), x["suit"]))
+    def add_log(self, message): self.logs.append(message)
+    def sort_hand(self, hand): hand.sort(key=lambda x: (SORT_MAP.get(x["rank"], 99), x["suit"]))
 
     def draw_all(self):
-        if not self.deck: 
-            self.add_log("Deck is empty. No draw.")
-            return
+        if not self.deck: return
         self.add_log("Draw Phase (All players draw 1 card)")
         for i in range(self.num_players):
             idx = (self.parent_idx + i) % self.num_players
@@ -150,109 +131,76 @@ class GameState:
         next_parent = winner_idx
         for i, p in enumerate(self.players):
             if i == winner_idx: continue
-            loss = 0
-            if is_tenhou:
-                loss = 10
-            else:
-                base = sum(2 if c["rank"] == 99 else 1 for c in p["hand"])
-                if i == self.parent_idx:
-                    loss = math.ceil(base * 1.5)
-                else:
-                    loss = base
+            loss = 10 if is_tenhou else sum(2 if c["rank"] == 99 else 1 for c in p["hand"])
+            if not is_tenhou and i == self.parent_idx: loss = math.ceil(loss * 1.5)
             p["score"] -= loss
             total_lost += loss
         self.players[winner_idx]["score"] += total_lost
         self.parent_idx = next_parent
-        self.add_log(f"🏆 Winner: {self.get_player_name(winner_idx)}! (+{total_lost} pts)")
+        self.add_log(f"🏆 Winner: {self.players[winner_idx]['name']}! (+{total_lost} pts)")
 
     def analyze_hand_composition(self, cards):
         if not cards: return None
         non_jokers = [c for c in cards if c["rank"] != 99]
         joker_count = len(cards) - len(non_jokers)
         total_len = len(cards)
-
+        
+        # 2(Rank15)は単体のみ
         if any(c["rank"] == 15 for c in non_jokers):
             if total_len > 1: return None 
 
-        if not non_jokers:
-            return {'type': 'pair', 'rank': 99, 'len': total_len}
+        if not non_jokers: return {'type': 'pair', 'rank': 99, 'len': total_len}
 
         non_jokers.sort(key=lambda x: SORT_MAP.get(x["rank"], 0))
-        min_r = non_jokers[0]["rank"]
-        max_r = non_jokers[-1]["rank"]
+        min_r, max_r = non_jokers[0]["rank"], non_jokers[-1]["rank"]
         
         if all(c["rank"] == min_r for c in non_jokers):
             return {'type': 'pair' if total_len > 1 else 'single', 'rank': min_r, 'len': total_len}
 
+        # 階段
         if total_len >= 3:
             ranks = [c["rank"] for c in non_jokers]
             if len(set(ranks)) == len(ranks):
-                needed_span = (max_r - min_r + 1)
-                missing_cards = needed_span - len(non_jokers)
-                if joker_count >= missing_cards:
-                     unused = joker_count - missing_cards
-                     start_rank = max(3, min_r - unused)
-                     return {'type': 'stairs', 'rank': start_rank, 'len': total_len}
-
-        if total_len >= 4 and total_len % 2 == 0:
-            from collections import Counter
-            counts = Counter(c["rank"] for c in non_jokers)
-            if not any(v > 2 for v in counts.values()):
-                needed_jokers_for_fill = 0
-                for r in range(min_r, max_r + 1):
-                    needed_jokers_for_fill += (2 - counts.get(r, 0))
-                if joker_count >= needed_jokers_for_fill:
-                    current_span_cards = (max_r - min_r + 1) * 2
-                    remaining_cards_needed = total_len - current_span_cards
-                    remaining_jokers = joker_count - needed_jokers_for_fill
-                    if remaining_cards_needed >= 0 and remaining_jokers == remaining_cards_needed:
-                         pairs_below = remaining_cards_needed // 2
-                         start_rank = max(3, min_r - pairs_below)
-                         return {'type': 'paired_stairs', 'rank': start_rank, 'len': total_len}
+                needed = (max_r - min_r + 1) - len(non_jokers)
+                if joker_count >= needed:
+                     return {'type': 'stairs', 'rank': max(3, min_r - (joker_count - needed)), 'len': total_len}
         return None
 
     def is_valid_play(self, cards):
         if not cards: return False
+        if any(c["rank"] == 15 for c in cards) and len(cards) > 1: return False
         
-        has_two = any(c["rank"] == 15 for c in cards)
-        if has_two:
-            if len(cards) != 1: return False
+        # 2(15)単体は最強
+        if len(cards) == 1 and cards[0]["rank"] == 15:
             if not self.field: return True
             if len(self.field) == 1: return True
             return False
 
-        if len(cards) == 1 and cards[0]["rank"] == 99: return False
+        if len(cards) == 1 and cards[0]["rank"] == 99: return False # Joker単体禁止
         
         comp = self.analyze_hand_composition(cards)
         if not comp: return False
-        c_rank, c_type, c_len = comp['rank'], comp['type'], comp['len']
-
-        if c_rank == 99 and self.field:
-            f_non_jokers = [c for c in self.field if c["rank"] != 99]
-            if f_non_jokers:
-                f_non_jokers.sort(key=lambda x: SORT_MAP.get(x["rank"], 0))
-                if f_non_jokers[0]["rank"] == 14: return False
-
+        
+        # 場のカードとの比較
         if not self.field: return True
-        if c_len != len(self.field): return False
+        if comp['len'] != len(self.field): return False
+        if self.field_type not in ['single', 'pair'] and self.field_type != comp['type']: return False
         
-        target_type = self.field_type
-        if target_type in ['single', 'pair'] and c_type in ['single', 'pair']: pass
-        elif target_type != c_type: return False
-
+        # 場がJokerのみ(rank99)の場合の特殊処理などは省略(基本rankあり)
         f_non_jokers = [c for c in self.field if c["rank"] != 99]
-        if not f_non_jokers: f_rank = 99 
-        else:
-             f_non_jokers.sort(key=lambda x: SORT_MAP.get(x["rank"], 0))
-             f_rank = f_non_jokers[0]["rank"]
+        f_rank = f_non_jokers[0]["rank"] if f_non_jokers else 99
         
-        if c_rank == 99: return True
-        return c_rank == f_rank + 1
+        # 場がA(14)なら次は2(15)かJokerペア等は不可(2は単体のみだから)
+        if f_rank == 14 and comp['rank'] != 15:
+             # Aの次は出せない（2は単体専用だからペア等では出せない）
+             return False
+
+        if comp['rank'] == 99: return True
+        return comp['rank'] == f_rank + 1
 
     def format_cards_log(self, cards):
-        rank_map = {11:'J', 12:'Q', 13:'K', 14:'A', 15:'2', 99:'JK'}
-        def r_name(r): return rank_map.get(r, str(r))
-        return "[" + ",".join([f"{c['suit']}{r_name(c['rank'])}" for c in cards]) + "]"
+        rmap = {11:'J', 12:'Q', 13:'K', 14:'A', 15:'2', 99:'JK'}
+        return "[" + ",".join([f"{c['suit']}{rmap.get(c['rank'], str(c['rank']))}" for c in cards]) + "]"
 
     def apply_play(self, sid, indices):
         with self.lock:
@@ -269,31 +217,26 @@ class GameState:
             self.add_log(f"{p['name']} played {self.format_cards_log(selected)}")
 
             comp = self.analyze_hand_composition(selected)
-            if comp and not self.field:
-                self.field_type = comp['type']
+            if comp and not self.field: self.field_type = comp['type']
             
             self.field = selected
             self.field_owner = p_idx
             self.pass_count = 0
             self.is_first_turn = False
 
-            has_eight = any(c["rank"] == 8 for c in selected)
-            has_two = any(c["rank"] == 15 for c in selected)
-
-            if has_eight or has_two:
-                reason = "8-Cut" if has_eight else "2-Power"
-                self.add_log(f"⚡ {reason}! Field Cleared.")
+            has_8_or_2 = any(c["rank"] in [8, 15] for c in selected)
+            if has_8_or_2:
+                self.add_log(f"⚡ {'8-Cut' if any(c['rank']==8 for c in selected) else '2-Power'}!")
                 emit_update(self.room_id)
                 socketio.sleep(1.0)
                 self.draw_all()
                 self.field = []
                 self.field_type = None
-                self.field_owner = None
             else:
                 self.turn_idx = (self.turn_idx + 1) % self.num_players
 
             if not p["hand"]:
-                if is_tenhou: self.add_log(f"✨ TENHOU by {p['name']}!")
+                if is_tenhou: self.add_log(f"✨ TENHOU!")
                 self.calculate_scores(p_idx, is_tenhou)
                 self.game_over = True
             
@@ -301,7 +244,6 @@ class GameState:
                 next_p = self.players[self.turn_idx]
                 if next_p.get('is_cpu'):
                     socketio.start_background_task(self.run_cpu_turn, next_p['sid'])
-            
             return True
 
     def apply_pass(self, sid):
@@ -317,255 +259,148 @@ class GameState:
             self.is_first_turn = False
             
             if self.pass_count >= self.num_players - 1:
-                self.add_log("🍂 Field Cleared (All passed)")
+                self.add_log("🍂 Field Cleared")
                 emit_update(self.room_id)
                 socketio.sleep(1.0)
                 self.draw_all()
                 self.field = []
                 self.field_type = None
-                self.field_owner = None
                 self.pass_count = 0
             
             if not self.game_over:
                 next_p = self.players[self.turn_idx]
                 if next_p.get('is_cpu'):
                     socketio.start_background_task(self.run_cpu_turn, next_p['sid'])
-            
             return True
 
-    # --- CPU思考ロジック（修正版） ---
+    # --- CPUロジック (Brute Force) ---
     def run_cpu_turn(self, cpu_sid):
         with app.app_context():
             try:
                 socketio.sleep(1.0)
                 if self.game_over: return
+                p = self.players[self.turn_idx]
+                if p['sid'] != cpu_sid: return
 
-                current_p = self.players[self.turn_idx]
-                if current_p['sid'] != cpu_sid: return
-
-                p = current_p
-                # 手札の整理
                 hand = p["hand"]
-                hand_indices = list(range(len(hand)))
+                n = len(hand)
+                valid_moves = []
+
+                # 全組み合わせ探索 (手札枚数が少ないので高速)
+                # 場があるときは枚数を合わせるだけでいいので探索範囲を絞れる
+                search_sizes = [len(self.field)] if self.field else range(1, min(n + 1, 6))
                 
-                valid_move = None
-
-                # 候補手生成関数
-                def get_all_candidates(hand):
-                    cands = []
-                    # 1. Rank Groups (Single/Pair)
-                    rank_groups = {}
-                    for i, c in enumerate(hand):
-                        r = c["rank"]
-                        if r not in rank_groups: rank_groups[r] = []
-                        rank_groups[r].append(i)
-                    
-                    jokers = rank_groups.get(99, [])
-                    
-                    # Single / Pair (+Joker)
-                    for r, indices in rank_groups.items():
-                        if r == 99: continue
-                        if r == 15: # 2
-                            for idx in indices: cands.append([idx])
-                            continue
-                        # Pair or More
-                        for k in range(1, len(indices) + 1):
-                            cands.append(list(indices[:k]))
-                        # Joker support
-                        if jokers:
-                            for idx in indices:
-                                for j_cnt in range(1, len(jokers)+1):
-                                    cands.append([idx] + jokers[:j_cnt])
-
-                    # 2. Stairs (Same rank check is weak here but valid_play will filter)
-                    # 簡易実装: 同じランクを含まないインデックス群で階段を探す
-                    non_joker_indices = [i for i, c in enumerate(hand) if c["rank"] not in [99, 15]]
-                    unique_ranks = sorted(list(set(hand[i]["rank"] for i in non_joker_indices)))
-                    
-                    # 長さは場に合わせるか、なければ3以上
-                    target_lens = [len(self.field)] if self.field else [3, 4, 5]
-                    
-                    for length in target_lens:
-                        if length > len(hand): continue
-                        if length < 3: continue
-                        
-                        for start_r in unique_ranks:
-                            # 階段構成
-                            needed_indices = []
-                            jokers_used = 0
-                            possible = True
-                            
-                            for r in range(start_r, start_r + length):
-                                # そのランクのカードを持っているか
-                                found = next((i for i in non_joker_indices if hand[i]["rank"] == r), None)
-                                if found is not None:
-                                    needed_indices.append(found)
-                                else:
-                                    jokers_used += 1
-                            
-                            if jokers_used <= len(jokers):
-                                cand = needed_indices + jokers[:jokers_used]
-                                cands.append(cand)
-
-                    return cands
-
-                # --- 思考開始 ---
-                candidates = get_all_candidates(hand)
+                indices = list(range(n))
+                for size in search_sizes:
+                    for combo in combinations(indices, size):
+                        sel = [hand[i] for i in combo]
+                        if self.is_valid_play(sel):
+                            valid_moves.append(list(combo))
                 
-                # 自分が出せる合法手のみ抽出
-                playable_moves = []
-                for cand in candidates:
-                    sel = [hand[i] for i in cand]
-                    if self.is_valid_play(sel):
-                        playable_moves.append(cand)
+                # 戦略: 親なら枚数が多い方、子なら出せるなら出す
+                best_move = None
+                if valid_moves:
+                    if not self.field:
+                        # 親: 枚数が多い > ランクが低い
+                        valid_moves.sort(key=lambda m: (len(m), -hand[m[0]]['rank']), reverse=True)
+                    else:
+                        # 子: なんでもいいから出す (ランクが低い順)
+                        valid_moves.sort(key=lambda m: hand[m[0]]['rank'])
+                    best_move = valid_moves[0]
 
-                # 戦略: 親（リード）か子（フォロー）か
-                if not self.field:
-                    # 親: 枚数が多い順、強さが弱い順に出す
-                    # (len descending, rank ascending)
-                    # analyzeしてランク取得
-                    scored_moves = []
-                    for move in playable_moves:
-                        sel = [hand[i] for i in move]
-                        comp = self.analyze_hand_composition(sel)
-                        if comp:
-                            # 優先度スコア: 枚数 * 100 - ランク (枚数重視、弱い順)
-                            score = comp['len'] * 100 - comp['rank']
-                            scored_moves.append((score, move))
-                    
-                    scored_moves.sort(key=lambda x: x[0], reverse=True)
-                    if scored_moves:
-                        valid_move = scored_moves[0][1]
-                else:
-                    # 子: 出せるもののうち、一番弱いものを出す
-                    # rank ascending
-                    scored_moves = []
-                    for move in playable_moves:
-                        sel = [hand[i] for i in move]
-                        comp = self.analyze_hand_composition(sel)
-                        if comp:
-                            # 優先度スコア: -ランク (弱い順 = ランクが小さい方がスコア大...いや逆か)
-                            # sort reverse=Trueにするなら、弱い方(小)を優先したい -> -ランク
-                            score = -comp['rank']
-                            scored_moves.append((score, move))
-                    
-                    scored_moves.sort(key=lambda x: x[0], reverse=True) # スコア大きい順(-3 > -15)
-                    if scored_moves:
-                        valid_move = scored_moves[0][1]
-
-                # 特殊: 2を持っている場合、最後の一手やピンチで使うロジックなどあってもいいが
-                # 今回は上記ロジック（枚数優先）で単体2は後回しにされるはず
-
-                if valid_move:
-                    self.apply_play(cpu_sid, valid_move)
+                if best_move:
+                    self.apply_play(cpu_sid, best_move)
                 else:
                     self.apply_pass(cpu_sid)
                 
                 emit_update(self.room_id)
-
             except Exception as e:
-                print(f"!!! CPU ERROR !!! : {e}")
+                print(f"CPU ERROR: {e}")
                 traceback.print_exc()
-                try:
-                    self.apply_pass(cpu_sid)
-                    emit_update(self.room_id)
-                except:
-                    pass
+                self.apply_pass(cpu_sid)
+                emit_update(self.room_id)
+
+    def get_public_state(self, requester_sid):
+        my_idx = -1
+        my_hand = []
+        my_score = 0
+        p_list = []
+        for i, p in enumerate(self.players):
+            is_me = (p['sid'] == requester_sid)
+            if is_me:
+                my_idx = i
+                my_hand = p['hand']
+                my_score = p['score']
+            p_list.append({
+                "id": i, "name": p['name'], "hand_count": len(p['hand']), 
+                "score": p['score'], "is_me": is_me, "is_cpu": p.get('is_cpu')
+            })
+        return {
+            "room_id": self.room_id, "players": p_list, "my_idx": my_idx,
+            "my_hand": my_hand, "my_score": my_score,
+            "field": self.field, "field_owner": self.field_owner,
+            "turn": self.turn_idx, "parent": self.parent_idx,
+            "game_over": self.game_over, "logs": self.logs,
+            "game_started": self.game_started, "deck_count": len(self.deck)
+        }
 
 @app.route('/')
 def index(): return render_template('index.html')
 
 @socketio.on('join_game')
 def on_join(data):
-    room_id = data['room']
-    username = data['name']
-    
-    if room_id not in rooms:
-        rooms[room_id] = GameState(room_id)
-    
-    game = rooms[room_id]
-    if game.game_started:
-        emit('error', {'msg': 'Game already started'})
-        return
-
-    join_room(room_id)
-    game.add_player(request.sid, username)
-    emit_update(room_id)
+    room, name = data['room'], data['name']
+    if room not in rooms: rooms[room] = GameState(room)
+    if not rooms[room].game_started:
+        join_room(room)
+        rooms[room].add_player(request.sid, name)
+        emit_update(room)
 
 @socketio.on('start_practice')
 def on_practice(data):
-    username = data['name']
-    room_id = f"practice_{request.sid}"
-    
-    rooms[room_id] = GameState(room_id)
-    game = rooms[room_id]
-    join_room(room_id)
-    
-    game.add_player(request.sid, username, is_cpu=False)
-    game.add_player(f"cpu_{room_id}_1", "CPU 1", is_cpu=True)
-    game.add_player(f"cpu_{room_id}_2", "CPU 2", is_cpu=True)
-    game.add_player(f"cpu_{room_id}_3", "CPU 3", is_cpu=True)
-    
-    game.start_game()
-    emit_update(room_id)
+    room = f"practice_{request.sid}"
+    rooms[room] = GameState(room)
+    join_room(room)
+    rooms[room].add_player(request.sid, data['name'])
+    for i in range(1,4): rooms[room].add_player(f"cpu_{room}_{i}", f"CPU {i}", True)
+    rooms[room].start_game()
+    emit_update(room)
 
 @socketio.on('start_game')
 def on_start(data):
-    room_id = data['room']
-    if room_id in rooms:
-        game = rooms[room_id]
-        if game.start_game():
-            emit_update(room_id)
+    if data['room'] in rooms:
+        if rooms[data['room']].start_game(): emit_update(data['room'])
 
 @socketio.on('play_card')
 def on_play(data):
-    room_id = data['room']
-    indices = data['indices']
-    if room_id in rooms:
-        game = rooms[room_id]
-        p = next((p for p in game.players if p['sid'] == request.sid), None)
-        if p:
-            selected = [p["hand"][i] for i in indices]
-            if game.is_valid_play(selected):
-                if game.apply_play(request.sid, indices):
-                    emit_update(room_id)
-                else:
-                    emit('error', {'msg': 'Action failed'})
-            else:
-                emit('error', {'msg': 'Invalid Move'})
+    if data['room'] in rooms:
+        rooms[data['room']].apply_play(request.sid, data['indices'])
+        emit_update(data['room'])
 
 @socketio.on('pass_turn')
 def on_pass(data):
-    room_id = data['room']
-    if room_id in rooms:
-        game = rooms[room_id]
-        if game.apply_pass(request.sid):
-            emit_update(room_id)
+    if data['room'] in rooms:
+        rooms[data['room']].apply_pass(request.sid)
+        emit_update(data['room'])
 
 @socketio.on('next_game')
 def on_next(data):
-    room_id = data['room']
-    if room_id in rooms:
-        game = rooms[room_id]
-        game.next_game()
-        emit_update(room_id)
+    if data['room'] in rooms:
+        rooms[data['room']].next_game()
+        emit_update(data['room'])
 
 @socketio.on('reset_game')
 def on_reset(data):
-    room_id = data['room']
-    if room_id in rooms:
-        game = rooms[room_id]
-        game.init_round(keep_scores=False)
-        emit_update(room_id)
+    if data['room'] in rooms:
+        rooms[data['room']].init_round(False)
+        emit_update(data['room'])
 
 @socketio.on('disconnect')
 def on_disconnect():
-    for rid, game in rooms.items():
-        for p in game.players:
-            if p['sid'] == request.sid:
-                game.remove_player(request.sid)
-                emit_update(rid)
-                return
+    for r in rooms.values():
+        if any(p['sid'] == request.sid for p in r.players):
+            r.remove_player(request.sid)
+            emit_update(r.room_id)
 
 if __name__ == '__main__':
     socketio.run(app, debug=True, port=5001)
