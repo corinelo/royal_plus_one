@@ -4,61 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Getsurai</title>
-
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon.png') }}">
-
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
-    
     <style>
-        body { 
-            font-family: 'Roboto Mono', monospace; 
-            transition: background-color 0.5s ease; 
-            overflow: hidden; 
-            height: 100dvh; /* スマホのアドレスバー対策 */
-            width: 100%;
-            touch-action: manipulation;
-        }
+        body { font-family: 'Roboto Mono', monospace; overflow: hidden; height: 100dvh; width: 100%; touch-action: manipulation; }
         .font-casino { font-family: 'Cinzel', serif; }
-        .font-rank { font-family: sans-serif; font-weight: 800; }
         .bg-my-turn { background: radial-gradient(circle at center, #065f46 0%, #022c22 100%); }
         .bg-wait { background: radial-gradient(circle at center, #1e293b 0%, #020617 100%); }
-
-        .card-base {
-            background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
-            border-radius: 4px;
-            box-shadow: 1px 2px 4px rgba(0,0,0,0.3);
-            position: relative;
-            overflow: hidden;
-            border: 1px solid #e5e7eb;
-            transition: transform 0.1s;
-            user-select: none;
-        }
-        .card.selected { transform: translateY(-20px) scale(1.05) !important; z-index: 30; box-shadow: 0 0 15px rgba(250, 204, 21, 0.8); border-color: #facc15; }
-        
-        .card-back {
-            background: repeating-linear-gradient(45deg, #b91c1c, #b91c1c 5px, #991b1b 5px, #991b1b 10px);
-            border: 1px solid #fff;
-            border-radius: 3px;
-        }
-        .hint-blue { box-shadow: 0 0 8px #3b82f6; border-color: #3b82f6; }
-        
-        .log-area { scrollbar-width: thin; scrollbar-color: #4b5563 #1f2937; }
+        .card-base { background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%); border-radius: 4px; box-shadow: 1px 2px 4px rgba(0,0,0,0.3); border: 1px solid #e5e7eb; transition: transform 0.1s; }
+        .card.selected { transform: translateY(-15px) scale(1.05) !important; z-index: 30; border-color: #facc15; box-shadow: 0 0 10px rgba(250, 204, 21, 0.8); }
+        .card-back { background: repeating-linear-gradient(45deg, #b91c1c, #b91c1c 5px, #991b1b 5px, #991b1b 10px); border: 1px solid #fff; border-radius: 3px; }
+        .hint-blue { box-shadow: 0 0 6px #3b82f6; border-color: #3b82f6; }
         .log-area::-webkit-scrollbar { width: 4px; }
-        .log-area::-webkit-scrollbar-track { background: #1f2937; }
-        .log-area::-webkit-scrollbar-thumb { background-color: #4b5563; border-radius: 2px; }
-
-        @keyframes floatUp {
-            0% { transform: translateY(0) scale(0.5); opacity: 0; }
-            20% { transform: translateY(-20px) scale(1.2); opacity: 1; }
-            80% { transform: translateY(-50px) scale(1); opacity: 1; }
-            100% { transform: translateY(-80px) scale(0.8); opacity: 0; }
-        }
+        .log-area::-webkit-scrollbar-thumb { background-color: #4b5563; }
+        @keyframes floatUp { 0% {transform:translateY(0) scale(0.5);opacity:0} 20%{transform:translateY(-20px) scale(1.2);opacity:1} 100%{transform:translateY(-80px) scale(0.8);opacity:0}}
         .stamp-anim { animation: floatUp 2s ease-out forwards; pointer-events: none; }
     </style>
 </head>
@@ -69,70 +34,48 @@
     <div id="lobby-screen" class="absolute inset-0 z-50 flex items-center justify-center bg-black/95 p-4">
         <div class="bg-gray-800 p-6 rounded-xl shadow-2xl border border-yellow-500/30 text-center max-w-md w-full">
             <h1 class="text-4xl font-casino text-yellow-500 mb-2">Getsurai</h1>
-            <p class="text-xs text-gray-400 mb-6 tracking-widest">- Royal +1 Strategy -</p>
-
-            <input type="text" id="username" placeholder="Your Name" class="w-full bg-gray-700 p-3 rounded mb-4 text-white border border-gray-600 focus:border-yellow-500 outline-none">
-            
+            <input type="text" id="username" placeholder="Name" class="w-full bg-gray-700 p-3 rounded mb-4 text-white">
             <div class="space-y-3">
-                <div class="border-b border-gray-600 pb-3">
-                    <button onclick="startPractice()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded transition shadow-lg border border-blue-400">
-                        PRACTICE (vs CPU)
-                    </button>
-                </div>
-                <div>
-                    <input type="text" id="room-id" placeholder="Room ID" class="w-full bg-gray-700 p-3 rounded mb-2 text-white border border-gray-600 focus:border-yellow-500 outline-none">
-                    <button onclick="joinGame()" class="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-bold py-3 rounded transition shadow-lg">
-                        JOIN / RECONNECT
-                    </button>
+                <button onclick="startPractice()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded">PRACTICE (vs CPU)</button>
+                <div class="flex gap-2">
+                    <input type="text" id="room-id" placeholder="Room ID" class="w-2/3 bg-gray-700 p-3 rounded text-white">
+                    <button onclick="joinGame()" class="w-1/3 bg-yellow-600 hover:bg-yellow-500 text-black font-bold py-3 rounded">JOIN</button>
                 </div>
             </div>
-            <div id="lobby-msg" class="text-red-400 mt-2 text-sm"></div>
         </div>
     </div>
 
     <div id="wait-screen" class="hidden absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/90 p-4">
         <h2 class="text-2xl font-casino text-white mb-4">Waiting...</h2>
         <div id="player-list" class="flex gap-4 mb-8 flex-wrap justify-center"></div>
-        <button id="btn-start" onclick="startGame()" class="bg-green-600 hover:bg-green-500 px-8 py-3 rounded font-bold hidden">START GAME</button>
-        <div class="text-gray-400 mt-4 text-sm">Room: <span id="display-room-id" class="text-white font-mono"></span></div>
+        <button id="btn-start" onclick="startGame()" class="bg-green-600 hover:bg-green-500 px-8 py-3 rounded font-bold hidden">START</button>
+        <div class="text-gray-400 mt-4 text-sm">Room: <span id="display-room-id"></span></div>
     </div>
 
-    <div id="game-screen" class="hidden flex-grow flex flex-row h-full overflow-hidden">
-        <div class="flex-grow flex flex-col relative h-full">
-            
-            <div class="flex justify-between items-center px-2 py-1 z-10 bg-black/20 h-10 shrink-0">
-                <div class="text-lg text-yellow-500 font-casino truncate">
-                    <span class="sm:hidden">Gets</span>
-                    <span class="hidden sm:inline">Getsurai</span>
-                    <span class="text-[10px] text-gray-400" id="room-display"></span>
-                </div>
+    <div id="game-screen" class="hidden flex-grow flex flex-row h-full w-full overflow-hidden">
+        <div class="flex-grow flex flex-col relative h-full min-w-0">
+            <div class="flex justify-between items-center px-2 h-10 shrink-0 bg-black/20">
+                <div class="text-lg text-yellow-500 font-casino truncate">Getsurai <span class="text-[10px] text-gray-400" id="room-display"></span></div>
                 <div class="flex gap-2 items-center">
-                    <div class="flex items-center gap-1 bg-black/40 px-2 py-0.5 rounded-full border border-white/10">
-                        <span class="text-[9px] text-gray-400">DECK</span>
-                        <span id="deck-count" class="text-xs font-bold font-mono">0</span>
-                    </div>
-                    <button onclick="document.getElementById('rule-modal').classList.remove('hidden')" class="bg-gray-700 text-white px-2 py-0.5 rounded text-[10px] border border-gray-500">RULES</button>
+                    <div class="bg-black/40 px-2 py-0.5 rounded-full text-[10px] text-gray-400">DECK <span id="deck-count" class="text-white font-bold">0</span></div>
+                    <button onclick="document.getElementById('rule-modal').classList.remove('hidden')" class="bg-gray-700 text-white px-2 py-0.5 rounded text-[10px]">RULES</button>
                 </div>
             </div>
 
-            <div id="opponents-area" class="flex justify-around items-start w-full px-1 h-16 shrink-0 mt-1 relative"></div>
+            <div id="opponents-area" class="flex justify-around items-start w-full h-14 shrink-0 mt-1"></div>
 
             <div class="flex-grow flex flex-col items-center justify-center relative min-h-0">
-                <div class="text-center opacity-80 mb-1">
-                    <div class="text-[9px] tracking-[0.2em] uppercase text-yellow-200">Next</div>
-                    <div id="target-rank" class="text-xl font-casino font-bold text-white drop-shadow-lg leading-none">-</div>
-                </div>
+                <div class="text-[9px] tracking-widest text-yellow-200 opacity-80">NEXT <span id="target-rank" class="text-lg font-casino font-bold text-white ml-1">-</span></div>
                 <div id="field-container" class="relative w-full h-20 flex flex-col items-center justify-center">
-                    <div id="field-cards" class="flex -space-x-8 z-10 scale-90 sm:scale-100"></div>
-                    <div id="field-owner-label" class="mt-2 opacity-0 transition-opacity bg-black/50 px-2 py-0.5 rounded-full text-[9px] text-yellow-300 font-bold border border-yellow-500/30">Played by: -</div>
+                    <div id="field-cards" class="flex -space-x-8 z-10 scale-90"></div>
+                    <div id="field-owner-label" class="mt-1 opacity-0 bg-black/50 px-2 py-0.5 rounded-full text-[9px] text-yellow-300">Played by: -</div>
                 </div>
             </div>
 
-            <div class="w-full flex flex-col items-center pb-2 sm:pb-4 shrink-0 bg-gradient-to-t from-black/60 to-transparent relative">
-                
-                <div class="absolute right-2 -top-10 z-40">
-                    <button onclick="toggleStampMenu()" class="w-8 h-8 rounded-full bg-gray-800 border border-gray-600 text-lg shadow-lg flex items-center justify-center hover:bg-gray-700 transition">😊</button>
-                    <div id="stamp-menu" class="hidden absolute bottom-10 right-0 bg-gray-800 border border-gray-600 rounded-lg p-2 grid grid-cols-4 gap-2 w-48 shadow-2xl"></div>
+            <div class="w-full flex flex-col items-center pb-2 shrink-0 bg-gradient-to-t from-black/60 to-transparent relative">
+                <div class="absolute right-2 -top-8 z-40">
+                    <button onclick="document.getElementById('stamp-menu').classList.toggle('hidden')" class="w-8 h-8 rounded-full bg-gray-800 border border-gray-500 text-lg flex items-center justify-center">😊</button>
+                    <div id="stamp-menu" class="hidden absolute bottom-9 right-0 bg-gray-800 border border-gray-600 rounded p-1 grid grid-cols-4 gap-1 w-40 shadow-xl"></div>
                 </div>
 
                 <div class="mb-1 flex items-center gap-2 bg-gray-900/80 border border-yellow-500/30 px-3 py-0.5 rounded-full">
@@ -141,350 +84,188 @@
                     <span id="parent-badge" class="hidden bg-red-600 text-[8px] px-1 rounded text-white font-bold">DEALER</span>
                 </div>
 
-                <div id="my-hand" class="flex justify-center -space-x-5 sm:-space-x-8 px-4 h-24 sm:h-28 items-end mb-2 w-full overflow-visible"></div>
+                <div id="my-hand" class="flex justify-center -space-x-5 px-2 h-20 items-end mb-1 w-full"></div>
 
-                <div class="flex justify-center gap-4 h-10 w-full px-4">
-                    <button id="btn-play" onclick="playCards()" class="hidden w-1/2 bg-blue-600 active:bg-blue-400 text-white font-bold rounded-full shadow-lg border border-blue-400 text-sm tracking-widest flex items-center justify-center">PLAY</button>
-                    <button id="btn-pass" onclick="passTurn()" class="w-1/2 bg-gray-700 active:bg-gray-500 text-gray-300 font-bold rounded-full shadow-lg border border-gray-600 text-sm tracking-widest flex items-center justify-center">PASS</button>
+                <div class="flex justify-center gap-3 h-10 w-full px-4">
+                    <button id="btn-play" onclick="playCards()" class="hidden w-1/2 bg-blue-600 active:bg-blue-400 text-white font-bold rounded shadow-lg text-sm">PLAY</button>
+                    <button id="btn-pass" onclick="passTurn()" class="w-1/2 bg-gray-700 active:bg-gray-500 text-gray-300 font-bold rounded shadow-lg text-sm">PASS</button>
                 </div>
             </div>
         </div>
 
         <div class="w-20 sm:w-48 bg-gray-900 border-l border-gray-700 flex flex-col shrink-0">
-            <div class="p-1 sm:p-2 border-b border-gray-700 bg-gray-800 text-center"><h2 class="text-[10px] font-bold text-gray-400">LOG</h2></div>
             <div id="game-log" class="flex-grow p-1 overflow-y-auto log-area space-y-1 text-[9px] font-mono text-gray-300 break-words leading-tight"></div>
         </div>
     </div>
 
-    <div id="rule-modal" class="fixed inset-0 bg-black/90 z-[60] hidden flex items-center justify-center p-4" onclick="this.classList.add('hidden')">
-        <div class="bg-gray-800 text-gray-200 p-6 rounded-lg max-w-lg w-full max-h-[80vh] overflow-y-auto border border-yellow-500/30" onclick="event.stopPropagation()">
-            <h2 class="text-xl font-casino text-yellow-500 mb-2 border-b border-gray-600 pb-2">Getsurai Rules</h2>
-            <div class="space-y-3 text-xs sm:text-sm font-sans">
-                <p><strong>Core Rule (+1):</strong> Play cards exactly <strong>Rank +1</strong> higher.</p>
-                <ul class="list-disc list-inside ml-2">
-                    <li><strong>2:</strong> Strongest. Clears field.</li>
-                    <li><strong>8:</strong> Clears field immediately.</li>
-                    <li><strong>JOKER:</strong> Wildcard.</li>
-                </ul>
-                <p><strong>Draw:</strong> When field clears, everyone draws 1 card.</p>
-            </div>
-            <div class="mt-4 text-center">
-                <button onclick="document.getElementById('rule-modal').classList.add('hidden')" class="bg-yellow-600 text-black font-bold py-2 px-6 rounded-full text-sm">CLOSE</button>
-            </div>
+    <div id="rule-modal" class="hidden fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-4" onclick="this.classList.add('hidden')">
+        <div class="bg-gray-800 text-gray-200 p-4 rounded-lg max-w-sm w-full text-xs" onclick="event.stopPropagation()">
+            <h2 class="text-lg font-bold text-yellow-500 mb-2">Rules</h2>
+            <p>Play <strong>Rank +1</strong> (e.g. 5->6).</p>
+            <ul class="list-disc ml-4 my-2"><li>2: Strongest Single</li><li>8: Cut</li><li>JK: Wild</li></ul>
+            <p>Clear -> Draw 1 card.</p>
         </div>
     </div>
 
-    <div id="modal-overlay" class="fixed inset-0 bg-black/95 z-50 hidden flex flex-col items-center justify-center p-4">
-        <h2 class="text-5xl font-casino text-yellow-400 mb-6 drop-shadow-[0_0_15px_rgba(250,204,21,0.5)] animate-pulse">FINISH!!</h2>
-        <div id="modal-scores" class="w-full max-w-sm bg-gray-900 p-4 rounded-lg mb-8 border border-gray-700"></div>
-        <div class="flex flex-col gap-4 w-full max-w-xs">
-            <button onclick="reqNextGame()" class="bg-white text-black font-bold py-3 rounded-full hover:bg-yellow-400 transition shadow-lg text-lg tracking-wider">
-                NEXT GAME <span class="text-xs block font-normal opacity-70">(Keep Scores)</span>
-            </button>
-            <button onclick="reqResetGame()" class="bg-red-900 text-white font-bold py-3 rounded-full hover:bg-red-700 transition shadow-lg text-lg border border-red-700 tracking-wider">
-                RESET & RESTART <span class="text-xs block font-normal opacity-70">(Score 0)</span>
-            </button>
+    <div id="modal-overlay" class="hidden fixed inset-0 bg-black/95 z-50 flex flex-col items-center justify-center p-4">
+        <h2 class="text-4xl font-casino text-yellow-400 mb-4 animate-pulse">FINISH!!</h2>
+        <div id="modal-scores" class="w-full max-w-xs bg-gray-900 p-4 rounded mb-6 text-sm"></div>
+        <div class="flex gap-2 w-full max-w-xs">
+            <button onclick="reqNextGame()" class="flex-1 bg-white text-black font-bold py-3 rounded">NEXT</button>
+            <button onclick="reqResetGame()" class="flex-1 bg-red-900 text-white font-bold py-3 rounded">RESET</button>
         </div>
     </div>
 
 <script>
     const socket = io();
-    let currentRoom = "";
-    let myName = "";
-    let gameState = {};
-    let prevScores = {};
-    let selectedIndices = [];
-    const SUITS = {'♠':'♠', '♥':'♥', '♦':'♦', '♣':'♣', 'JK':'🤡'};
-    const STAMPS = ['👍', '👎', '😂', '😭', '😡', '🤔', '🎉', 'ﾌﾞｼｬｰ'];
+    let currentRoom="", myName="", gameState={}, prevScores={}, selectedIndices=[];
+    const SUITS={'♠':'♠','♥':'♥','♦':'♦','♣':'♣','JK':'🤡'}, STAMPS=['👍','👎','😂','😭','😡','🤔','🎉','😎'];
 
-    window.onload = function() {
-        const savedName = localStorage.getItem('gets_name');
-        const savedRoom = localStorage.getItem('gets_room');
-        if(savedName) document.getElementById('username').value = savedName;
-        if(savedRoom) document.getElementById('room-id').value = savedRoom;
-        
-        const menu = document.getElementById('stamp-menu');
-        STAMPS.forEach(s => {
-            const btn = document.createElement('button');
-            btn.className = "text-2xl hover:scale-125 transition active:scale-95";
-            btn.innerText = s;
-            btn.onclick = () => sendStamp(s);
-            menu.appendChild(btn);
+    window.onload = () => {
+        const sn=localStorage.getItem('g_n'), sr=localStorage.getItem('g_r');
+        if(sn) document.getElementById('username').value=sn;
+        if(sr) document.getElementById('room-id').value=sr;
+        const m = document.getElementById('stamp-menu');
+        STAMPS.forEach(s=>{
+            const b=document.createElement('button');
+            b.innerText=s; b.className="text-xl hover:scale-110";
+            b.onclick=()=>{socket.emit('send_stamp',{room:currentRoom,stamp_id:s}); m.classList.add('hidden');};
+            m.appendChild(b);
         });
     };
 
-    function joinGame() {
-        const name = document.getElementById('username').value || "Guest";
-        const room = document.getElementById('room-id').value;
-        if(!room) { alert("Please enter Room ID"); return; }
-        localStorage.setItem('gets_name', name);
-        localStorage.setItem('gets_room', room);
-        myName = name;
-        currentRoom = room;
-        socket.emit('join_game', {room: room, name: name});
+    function joinGame(){
+        const n=document.getElementById('username').value||"Guest", r=document.getElementById('room-id').value;
+        if(!r) return alert("Enter Room ID");
+        localStorage.setItem('g_n',n); localStorage.setItem('g_r',r);
+        myName=n; currentRoom=r;
+        socket.emit('join_game',{room:r,name:n});
     }
+    function startPractice(){ myName=document.getElementById('username').value||"Player"; socket.emit('start_practice',{name:myName}); }
+    function startGame(){ socket.emit('start_game',{room:currentRoom}); }
+    function playCards(){ socket.emit('play_card',{room:currentRoom,indices:selectedIndices}); selectedIndices=[]; }
+    function passTurn(){ socket.emit('pass_turn',{room:currentRoom}); selectedIndices=[]; }
+    function reqNextGame(){ socket.emit('next_game',{room:currentRoom}); }
+    function reqResetGame(){ if(confirm("Reset?")) socket.emit('reset_game',{room:currentRoom}); }
 
-    function startPractice() {
-        const name = document.getElementById('username').value || "Player";
-        myName = name;
-        socket.emit('start_practice', {name: name});
-    }
-
-    function startGame() { socket.emit('start_game', {room: currentRoom}); }
-
-    function toggleStampMenu() { document.getElementById('stamp-menu').classList.toggle('hidden'); }
-
-    function sendStamp(stampId) {
-        socket.emit('send_stamp', {room: currentRoom, stamp_id: stampId});
-        toggleStampMenu();
-    }
-
-    socket.on('receive_stamp', (data) => {
-        const sid = data.sid;
-        const stamp = data.stamp_id;
-        let targetEl = null;
-        if (gameState.players) {
-            const p = gameState.players.find(pl => pl.sid === sid);
-            if(sid === socket.id) targetEl = document.getElementById('my-hand');
-            else targetEl = document.getElementById('opponents-area');
-        }
-        if(!targetEl) targetEl = document.body;
-
-        const rect = targetEl.getBoundingClientRect();
-        const el = document.createElement('div');
-        el.innerText = stamp;
-        el.className = "absolute text-4xl stamp-anim z-[50]";
-        const left = rect.left + rect.width / 2;
-        const top = rect.top + rect.height / 2;
-        el.style.left = (left - 20) + 'px';
-        el.style.top = (top - 20) + 'px';
-        document.getElementById('stamp-layer').appendChild(el);
-        setTimeout(() => el.remove(), 2000);
-    });
-
-    socket.on('error', (data) => { alert(data.msg); });
-
-    socket.on('update_state', (state) => {
-        if(!state.game_over) {
-            state.players.forEach(p => {
-                if(prevScores[p.id] === undefined || state.turn === 0) {}
-            });
-        }
-        gameState = state;
-        if(state.room_id) currentRoom = state.room_id;
-
+    socket.on('update_state', s => {
+        if(!s.game_over) s.players.forEach(p=>{ if(prevScores[p.id]===undefined||s.turn===0) {} });
+        gameState=s; if(s.room_id) currentRoom=s.room_id;
         document.getElementById('lobby-screen').classList.add('hidden');
-        if(!state.game_started) {
+        if(!s.game_started) {
             document.getElementById('wait-screen').classList.remove('hidden');
             document.getElementById('game-screen').classList.add('hidden');
-            updateLobby(state);
-            state.players.forEach(p => prevScores[p.id] = p.score);
+            updateLobby(s);
+            s.players.forEach(p=>prevScores[p.id]=p.score);
         } else {
             document.getElementById('wait-screen').classList.add('hidden');
             document.getElementById('game-screen').classList.remove('hidden');
-            renderGame(state);
+            renderGame(s);
         }
     });
 
-    function updateLobby(state) {
-        document.getElementById('display-room-id').innerText = currentRoom;
-        const list = document.getElementById('player-list');
-        list.innerHTML = state.players.map(p => `
-            <div class="bg-gray-800 p-3 rounded text-center border border-gray-600 min-w-[80px]">
-                <div class="text-xl">${p.is_cpu ? '🤖' : '👤'}</div>
-                <div class="font-bold text-xs mt-1 truncate w-16 mx-auto">${p.name}</div>
-            </div>
-        `).join('');
-        if(state.players.length >= 2) document.getElementById('btn-start').classList.remove('hidden');
+    socket.on('receive_stamp', d => {
+        const el=document.createElement('div'); el.innerText=d.stamp_id; el.className="absolute text-4xl stamp-anim z-[50]";
+        let t=document.getElementById('opponents-area');
+        if(d.sid===socket.id) t=document.getElementById('my-hand');
+        const r=t.getBoundingClientRect();
+        el.style.left=(r.left+r.width/2-20)+'px'; el.style.top=(r.top+r.height/2-20)+'px';
+        document.getElementById('stamp-layer').appendChild(el);
+        setTimeout(()=>el.remove(),2000);
+    });
+
+    function updateLobby(s){
+        document.getElementById('display-room-id').innerText=currentRoom;
+        document.getElementById('player-list').innerHTML=s.players.map(p=>`<div class="bg-gray-800 p-2 rounded text-center w-16"><div class="text-lg">${p.is_cpu?'🤖':'👤'}</div><div class="text-[10px] truncate">${p.name}</div></div>`).join('');
+        if(s.players.length>=2) document.getElementById('btn-start').classList.remove('hidden');
         else document.getElementById('btn-start').classList.add('hidden');
     }
 
-    function getRankName(r) {
-        if(r===11)return'J'; if(r===12)return'Q'; if(r===13)return'K'; if(r===14)return'A'; if(r===15)return'2'; if(r===99)return'JK';
-        return r;
-    }
-
-    function renderGame(state) {
-        document.getElementById('room-display').innerText = `Room: ${currentRoom}`;
-        document.getElementById('deck-count').innerText = state.deck_count;
-        const isMyTurn = (state.turn === state.my_idx);
-        document.body.className = isMyTurn ? 'bg-my-turn text-white flex flex-col h-[100dvh]' : 'bg-wait text-white flex flex-col h-[100dvh]';
-
-        const logArea = document.getElementById('game-log');
-        logArea.innerHTML = [...state.logs].reverse().map(log => {
-            let dispLog = log.replace(" played", "").replace(" passed", " pass").replace(" joined", " in");
-            const color = log.includes(myName) || log.includes("YOU") ? "text-yellow-400" : "text-gray-400";
-            return `<div class="${color} border-b border-gray-800 pb-1 mb-1">${dispLog}</div>`;
-        }).join('');
-        logArea.scrollTop = 0;
-
-        const oppArea = document.getElementById('opponents-area');
-        oppArea.innerHTML = state.players.filter(p => !p.is_me).map(p => {
-            const isTurn = (state.turn === p.id);
-            const isParent = (state.parent === p.id);
-            return `
-                <div class="flex flex-col items-center transition-all ${isTurn ? 'scale-110 opacity-100' : 'opacity-60'}" id="p-area-${p.id}">
-                    <div class="relative w-8 h-8 sm:w-12 sm:h-12 mb-1">
-                        <div class="w-full h-full rounded-full bg-gray-700 border-2 ${isTurn ? 'border-yellow-400 shadow-[0_0_10px_gold]' : 'border-gray-500'} flex items-center justify-center relative">
-                            <span class="text-sm sm:text-lg">${p.is_cpu ? '🤖' : '👤'}</span>
-                            ${isParent ? '<span class="absolute -top-1 -right-1 text-[8px] sm:text-[10px]">👑</span>' : ''}
-                        </div>
-                        <div class="absolute -bottom-2 w-full text-center"><span class="bg-black text-[8px] px-1 rounded truncate w-12 block mx-auto">${p.name}</span></div>
-                    </div>
-                    <div class="relative h-6 sm:h-10 mt-1 w-16 sm:w-20">
-                        ${Array(Math.min(p.hand_count, 10)).fill(0).map((_,i) => 
-                            `<div class="card-back absolute w-4 h-6 sm:w-6 sm:h-10" style="left:${i*6}px; top:0;"></div>`
-                        ).join('')}
-                    </div>
-                    <div class="text-[8px] text-gray-400">Score: ${p.score}</div>
-                </div>
-            `;
-        }).join('');
-
-        const fieldDiv = document.getElementById('field-cards');
-        fieldDiv.innerHTML = state.field.map((c, i) => renderCard(c, false, i)).join('');
+    function renderGame(s){
+        document.getElementById('room-display').innerText=`${currentRoom}`;
+        document.getElementById('deck-count').innerText=s.deck_count;
+        document.body.className = (s.turn===s.my_idx) ? 'bg-my-turn text-white flex flex-col' : 'bg-wait text-white flex flex-col';
         
-        const ownerLabel = document.getElementById('field-owner-label');
-        if(state.field.length > 0 && state.field_owner !== null) {
-            ownerLabel.classList.remove('opacity-0');
-            const owner = state.players.find(p => p.id === state.field_owner);
-            ownerLabel.innerText = "Played by: " + (owner ? owner.name : "?");
-        } else {
-            ownerLabel.classList.add('opacity-0');
+        // Log
+        const l=document.getElementById('game-log');
+        l.innerHTML=[...s.logs].reverse().map(g=>{
+            const c=g.includes(myName)||g.includes("YOU")?"text-yellow-400":"text-gray-400";
+            return `<div class="${c} border-b border-gray-800 pb-1 mb-1">${g.replace(" played","").replace(" passed"," pass")}</div>`;
+        }).join('');
+        l.scrollTop=0;
+
+        // Opponents
+        document.getElementById('opponents-area').innerHTML=s.players.filter(p=>!p.is_me).map(p=>`
+            <div class="flex flex-col items-center opacity-${s.turn===p.id?'100':'60'} scale-${s.turn===p.id?'110':'100'} transition-all">
+                <div class="relative w-8 h-8 rounded-full bg-gray-700 border flex items-center justify-center ${s.turn===p.id?'border-yellow-400':'border-gray-500'}">
+                    <span>${p.is_cpu?'🤖':'👤'}</span>
+                    ${s.parent===p.id?'<span class="absolute -top-1 -right-1 text-[8px]">👑</span>':''}
+                </div>
+                <div class="text-[8px] truncate w-12 text-center mt-1">${p.name}</div>
+                <div class="flex -space-x-1 mt-1 h-6">
+                    ${Array(Math.min(p.hand_count,10)).fill(0).map(()=>`<div class="w-3 h-5 bg-red-800 border border-white rounded-[1px]"></div>`).join('')}
+                </div>
+                <div class="text-[8px] text-gray-400">${p.score}</div>
+            </div>
+        `).join('');
+
+        // Field
+        document.getElementById('field-cards').innerHTML=s.field.map((c,i)=>
+            `<div class="card-base w-10 h-14 flex flex-col items-center justify-center" style="margin-left:${i===0?0:-20}px;transform:rotate(${(Math.random()-0.5)*5}deg)">
+                <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} font-bold text-lg leading-none">${[11,12,13,14,15,99].includes(c.rank)?{11:'J',12:'Q',13:'K',14:'A',15:'2',99:'JK'}[c.rank]:c.rank}</span>
+                <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} text-xs">${SUITS[c.suit]}</span>
+            </div>`
+        ).join('');
+        document.getElementById('field-owner-label').style.opacity = s.field.length?'1':'0';
+        
+        let t="ANY"; if(s.field.length){
+            const valid = s.field.filter(c=>c.rank!==99).map(c=>c.rank).sort((a,b)=>a-b);
+            const cur = valid.length ? valid[valid.length-1] : 99;
+            if(cur===99) t="FREE"; else if(cur===15) t="MAX"; else t={11:'J',12:'Q',13:'K',14:'A',15:'2',99:'JK'}[cur+1]||cur+1;
         }
+        document.getElementById('target-rank').innerText=t;
 
-        let targetText = "ANY";
-        let nextRankVal = -1;
-        if(state.field.length > 0) {
-            const valid = state.field.filter(c=>c.rank!==99).map(c=>c.rank);
-            const SORT_MAP = {3:0,4:1,5:2,6:3,7:4,8:5,9:6,10:7,11:8,12:9,13:10,14:11,15:12,99:13};
-            valid.sort((a,b) => SORT_MAP[a] - SORT_MAP[b]);
-            const cur = valid.length>0 ? valid[valid.length-1] : 99;
-            if(cur===99) targetText="FREE";
-            else if(cur===15) targetText="MAX";
-            else { nextRankVal=cur+1; targetText=getRankName(nextRankVal); }
-        }
-        document.getElementById('target-rank').innerText = targetText;
-
-        document.getElementById('my-score').innerText = state.my_score;
-        if(state.parent === state.my_idx) document.getElementById('parent-badge').classList.remove('hidden');
-        else document.getElementById('parent-badge').classList.add('hidden');
-
-        const handDiv = document.getElementById('my-hand');
-        handDiv.innerHTML = state.my_hand.map((c, i) => {
-            const isSel = selectedIndices.includes(i);
-            let isPlayable = false;
-            if(isMyTurn) {
-                if(c.rank === 15 && state.field.length <= 1) isPlayable = true;
-                else if(state.field.length===0) isPlayable = (c.rank!==99);
-                else if(nextRankVal !== -1) isPlayable = (c.rank===nextRankVal || c.rank===99);
-                else if(targetText==="FREE") isPlayable = true;
-            }
-            let classes = `card-base w-14 h-20 sm:w-16 sm:h-24 flex flex-col items-center justify-center cursor-pointer `;
-            if(isSel) classes += "selected ";
-            else if(isPlayable) classes += "hint-blue ";
-            const style = `margin-left: -18px; z-index:${i}; transform: rotate(${(i-state.my_hand.length/2)*2.5}deg) translateY(${isSel?-20:0}px);`;
-            return `<div onclick="toggle(${i})" class="${classes}" style="${style}">
-                <div class="card-pattern"></div>
-                <div class="card-inner-border"></div>
-                ${renderCardContent(c)}
-            </div>`;
+        // Me
+        document.getElementById('my-score').innerText=s.my_score;
+        document.getElementById('parent-badge').classList.toggle('hidden', s.parent!==s.my_idx);
+        const myTurn = (s.turn===s.my_idx);
+        document.getElementById('my-hand').innerHTML=s.my_hand.map((c,i)=>{
+            const sel=selectedIndices.includes(i);
+            // 簡易ヒント: 出せるかわからないので全部青、ただし選択中は黄色
+            let cls = `card-base w-12 h-16 flex flex-col items-center justify-center cursor-pointer ${sel?'selected':(myTurn?'hint-blue':'')}`;
+            return `<div onclick="toggle(${i})" class="${cls}" style="margin-left:-20px;z-index:${i};transform:rotate(${(i-s.my_hand.length/2)*3}deg) translateY(${sel?-20:0}px)">
+                 <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} font-bold text-xl leading-none">${[11,12,13,14,15,99].includes(c.rank)?{11:'J',12:'Q',13:'K',14:'A',15:'2',99:'JK'}[c.rank]:c.rank}</span>
+                 <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} text-sm">${SUITS[c.suit]}</span>
+            </div>`
         }).join('');
 
-        const pBtn = document.getElementById('btn-play');
-        const passBtn = document.getElementById('btn-pass');
-        if(isMyTurn) {
-            passBtn.disabled = false; passBtn.classList.remove('opacity-50');
-            if(selectedIndices.length > 0) pBtn.classList.remove('hidden');
-            else pBtn.classList.add('hidden');
+        if(myTurn){
+            document.getElementById('btn-pass').classList.remove('opacity-50'); document.getElementById('btn-pass').disabled=false;
+            if(selectedIndices.length) document.getElementById('btn-play').classList.remove('hidden');
+            else document.getElementById('btn-play').classList.add('hidden');
         } else {
-            pBtn.classList.add('hidden');
-            passBtn.disabled = true; passBtn.classList.add('opacity-50');
+            document.getElementById('btn-play').classList.add('hidden');
+            document.getElementById('btn-pass').classList.add('opacity-50'); document.getElementById('btn-pass').disabled=true;
         }
 
-        if(state.game_over) {
+        if(s.game_over){
             document.getElementById('modal-overlay').classList.remove('hidden');
-            document.getElementById('modal-overlay').classList.add('flex');
-            
-            document.getElementById('modal-scores').innerHTML = state.players.map(p => {
-                const prev = prevScores[p.id] !== undefined ? prevScores[p.id] : 0;
-                const diff = p.score - prev;
-                const diffClass = diff > 0 ? "text-green-400" : (diff < 0 ? "text-red-400" : "text-gray-400");
-                const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
-                return `
-                <div class="flex justify-between items-center py-2 border-b border-gray-700 text-white">
-                    <div class="flex flex-col">
-                        <span>${p.name} ${state.parent===p.id?'👑':''}</span>
-                    </div>
-                    <div class="text-right">
-                        <span class="text-xs ${diffClass} mr-2">(${diffStr})</span>
-                        <span class="font-mono text-xl font-bold">${p.score}</span>
-                    </div>
-                </div>
-                `;
+            document.getElementById('modal-scores').innerHTML=s.players.map(p=>{
+                const diff=p.score-(prevScores[p.id]||0);
+                return `<div class="flex justify-between py-1 border-b border-gray-700 text-white"><span>${p.name}</span><div class="text-right"><span class="text-xs ${diff>0?'text-green-400':'text-red-400'} mr-2">(${diff>0?'+':''}${diff})</span><span class="font-bold">${p.score}</span></div></div>`;
             }).join('');
-
-            const myDiff = state.my_score - (prevScores[state.my_idx] || 0);
-            if(myDiff > 0) launchConfetti();
+            if(s.my_score-(prevScores[s.my_idx]||0) > 0) launchConfetti();
         } else {
             document.getElementById('modal-overlay').classList.add('hidden');
-            document.getElementById('modal-overlay').classList.remove('flex');
         }
     }
 
-    function launchConfetti() {
-        var duration = 3 * 1000;
-        var animationEnd = Date.now() + duration;
-        var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 60 };
-        function randomInRange(min, max) { return Math.random() * (max - min) + min; }
-        var interval = setInterval(function() {
-            var timeLeft = animationEnd - Date.now();
-            if (timeLeft <= 0) return clearInterval(interval);
-            var particleCount = 50 * (timeLeft / duration);
-            confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
-            confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
-        }, 250);
-    }
-
-    function renderCard(c, large, idx) {
-        return `<div class="card-base w-10 h-14 sm:w-14 sm:h-20 flex flex-col items-center justify-center" style="margin-left:${idx===0?0:-20}px; z-index:${idx}; transform: rotate(${(Math.random()-0.5)*10}deg);">
-            <div class="card-inner-border"></div>
-            ${renderCardContent(c, true)}
-        </div>`;
-    }
-
-    function renderCardContent(c, small=false) {
-        const isRed = (c.suit==='♥'||c.suit==='♦');
-        const color = isRed ? 'text-red-600' : 'text-gray-900';
-        return `
-            <div class="${color} font-bold flex flex-col items-center leading-none z-10">
-                <span class="font-rank text-lg sm:text-2xl">${getRankName(c.rank)}</span>
-                <span class="text-sm sm:text-2xl">${SUITS[c.suit]}</span>
-            </div>
-        `;
-    }
-
-    function toggle(i) {
-        if(gameState.turn !== gameState.my_idx) return;
-        const idx = selectedIndices.indexOf(i);
-        if(idx>-1) selectedIndices.splice(idx,1); else selectedIndices.push(i);
-        renderGame(gameState); 
-    }
-
-    function playCards() {
-        socket.emit('play_card', {room: currentRoom, indices: selectedIndices});
-        selectedIndices = [];
-    }
-    function passTurn() {
-        socket.emit('pass_turn', {room: currentRoom});
-        selectedIndices = [];
-    }
-    function reqNextGame() {
-        socket.emit('next_game', {room: currentRoom});
-    }
-    function reqResetGame() {
-        if(!confirm("本当に点数をリセットして最初から始めますか？")) return;
-        socket.emit('reset_game', {room: currentRoom});
+    function toggle(i){ if(gameState.turn===gameState.my_idx){ const x=selectedIndices.indexOf(i); if(x>-1)selectedIndices.splice(x,1);else selectedIndices.push(i); renderGame(gameState); }}
+    function launchConfetti(){
+        var end=Date.now()+3000; (function frame(){
+            confetti({particleCount:5,angle:60,spread:55,origin:{x:0}}); confetti({particleCount:5,angle:120,spread:55,origin:{x:1}});
+            if(Date.now()<end) requestAnimationFrame(frame);
+        }());
     }
 </script>
 </body>
