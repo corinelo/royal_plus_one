@@ -20,8 +20,8 @@
             font-family: 'Roboto Mono', monospace; 
             transition: background-color 0.5s ease; 
             overflow: hidden; 
-            height: 100dvh; 
-            width: 100vw;
+            height: 100dvh; /* スマホのアドレスバー対策 */
+            width: 100%;
             touch-action: manipulation;
         }
         .font-casino { font-family: 'Cinzel', serif; }
@@ -53,7 +53,6 @@
         .log-area::-webkit-scrollbar-track { background: #1f2937; }
         .log-area::-webkit-scrollbar-thumb { background-color: #4b5563; border-radius: 2px; }
 
-        /* スタンプアニメーション */
         @keyframes floatUp {
             0% { transform: translateY(0) scale(0.5); opacity: 0; }
             20% { transform: translateY(-20px) scale(1.2); opacity: 1; }
@@ -123,7 +122,7 @@
                     <div class="text-[9px] tracking-[0.2em] uppercase text-yellow-200">Next</div>
                     <div id="target-rank" class="text-xl font-casino font-bold text-white drop-shadow-lg leading-none">-</div>
                 </div>
-                <div id="field-container" class="relative w-full h-24 flex flex-col items-center justify-center">
+                <div id="field-container" class="relative w-full h-20 flex flex-col items-center justify-center">
                     <div id="field-cards" class="flex -space-x-8 z-10 scale-90 sm:scale-100"></div>
                     <div id="field-owner-label" class="mt-2 opacity-0 transition-opacity bg-black/50 px-2 py-0.5 rounded-full text-[9px] text-yellow-300 font-bold border border-yellow-500/30">Played by: -</div>
                 </div>
@@ -131,10 +130,9 @@
 
             <div class="w-full flex flex-col items-center pb-2 sm:pb-4 shrink-0 bg-gradient-to-t from-black/60 to-transparent relative">
                 
-                <div class="absolute right-2 bottom-12 sm:bottom-16 z-40">
-                    <button onclick="toggleStampMenu()" class="w-10 h-10 rounded-full bg-gray-800 border border-gray-600 text-xl shadow-lg flex items-center justify-center hover:bg-gray-700 transition">😊</button>
-                    <div id="stamp-menu" class="hidden absolute bottom-12 right-0 bg-gray-800 border border-gray-600 rounded-lg p-2 grid grid-cols-4 gap-2 w-48 shadow-2xl">
-                        </div>
+                <div class="absolute right-2 -top-10 z-40">
+                    <button onclick="toggleStampMenu()" class="w-8 h-8 rounded-full bg-gray-800 border border-gray-600 text-lg shadow-lg flex items-center justify-center hover:bg-gray-700 transition">😊</button>
+                    <div id="stamp-menu" class="hidden absolute bottom-10 right-0 bg-gray-800 border border-gray-600 rounded-lg p-2 grid grid-cols-4 gap-2 w-48 shadow-2xl"></div>
                 </div>
 
                 <div class="mb-1 flex items-center gap-2 bg-gray-900/80 border border-yellow-500/30 px-3 py-0.5 rounded-full">
@@ -152,7 +150,7 @@
             </div>
         </div>
 
-        <div class="w-24 sm:w-48 bg-gray-900 border-l border-gray-700 flex flex-col shrink-0">
+        <div class="w-20 sm:w-48 bg-gray-900 border-l border-gray-700 flex flex-col shrink-0">
             <div class="p-1 sm:p-2 border-b border-gray-700 bg-gray-800 text-center"><h2 class="text-[10px] font-bold text-gray-400">LOG</h2></div>
             <div id="game-log" class="flex-grow p-1 overflow-y-auto log-area space-y-1 text-[9px] font-mono text-gray-300 break-words leading-tight"></div>
         </div>
@@ -178,9 +176,7 @@
 
     <div id="modal-overlay" class="fixed inset-0 bg-black/95 z-50 hidden flex flex-col items-center justify-center p-4">
         <h2 class="text-5xl font-casino text-yellow-400 mb-6 drop-shadow-[0_0_15px_rgba(250,204,21,0.5)] animate-pulse">FINISH!!</h2>
-        
         <div id="modal-scores" class="w-full max-w-sm bg-gray-900 p-4 rounded-lg mb-8 border border-gray-700"></div>
-        
         <div class="flex flex-col gap-4 w-full max-w-xs">
             <button onclick="reqNextGame()" class="bg-white text-black font-bold py-3 rounded-full hover:bg-yellow-400 transition shadow-lg text-lg tracking-wider">
                 NEXT GAME <span class="text-xs block font-normal opacity-70">(Keep Scores)</span>
@@ -196,19 +192,17 @@
     let currentRoom = "";
     let myName = "";
     let gameState = {};
-    let prevScores = {}; // 前回のスコアを保持
+    let prevScores = {};
     let selectedIndices = [];
     const SUITS = {'♠':'♠', '♥':'♥', '♦':'♦', '♣':'♣', 'JK':'🤡'};
-    const STAMPS = ['👍', '👎', '😂', '😭', '😡', '🤔', '🎉', '😎'];
+    const STAMPS = ['👍', '👎', '😂', '😭', '😡', '🤔', '🎉', 'ﾌﾞｼｬｰ'];
 
-    // --- 1. 復帰サポート (LocalStorage) ---
     window.onload = function() {
         const savedName = localStorage.getItem('gets_name');
         const savedRoom = localStorage.getItem('gets_room');
         if(savedName) document.getElementById('username').value = savedName;
         if(savedRoom) document.getElementById('room-id').value = savedRoom;
         
-        // スタンプメニュー生成
         const menu = document.getElementById('stamp-menu');
         STAMPS.forEach(s => {
             const btn = document.createElement('button');
@@ -223,11 +217,8 @@
         const name = document.getElementById('username').value || "Guest";
         const room = document.getElementById('room-id').value;
         if(!room) { alert("Please enter Room ID"); return; }
-        
-        // 保存
         localStorage.setItem('gets_name', name);
         localStorage.setItem('gets_room', room);
-
         myName = name;
         currentRoom = room;
         socket.emit('join_game', {room: room, name: name});
@@ -239,14 +230,9 @@
         socket.emit('start_practice', {name: name});
     }
 
-    function startGame() {
-        socket.emit('start_game', {room: currentRoom});
-    }
+    function startGame() { socket.emit('start_game', {room: currentRoom}); }
 
-    // --- 3. スタンプ機能 ---
-    function toggleStampMenu() {
-        document.getElementById('stamp-menu').classList.toggle('hidden');
-    }
+    function toggleStampMenu() { document.getElementById('stamp-menu').classList.toggle('hidden'); }
 
     function sendStamp(stampId) {
         socket.emit('send_stamp', {room: currentRoom, stamp_id: stampId});
@@ -256,33 +242,22 @@
     socket.on('receive_stamp', (data) => {
         const sid = data.sid;
         const stamp = data.stamp_id;
-        
-        // 送信元の位置を探す
         let targetEl = null;
         if (gameState.players) {
-            const p = gameState.players.find(pl => pl.sid === sid); // sidはBackendで送る必要あり ※
-            // 簡易的に自分かどうかで判定
-            if(sid === socket.id) {
-                targetEl = document.getElementById('my-hand');
-            } else {
-                // 他プレイヤーエリアから探す(簡易実装)
-                targetEl = document.getElementById('opponents-area');
-            }
+            const p = gameState.players.find(pl => pl.sid === sid);
+            if(sid === socket.id) targetEl = document.getElementById('my-hand');
+            else targetEl = document.getElementById('opponents-area');
         }
-        
         if(!targetEl) targetEl = document.body;
 
         const rect = targetEl.getBoundingClientRect();
         const el = document.createElement('div');
         el.innerText = stamp;
         el.className = "absolute text-4xl stamp-anim z-[50]";
-        // ざっくり位置決め
         const left = rect.left + rect.width / 2;
         const top = rect.top + rect.height / 2;
-        
         el.style.left = (left - 20) + 'px';
         el.style.top = (top - 20) + 'px';
-
         document.getElementById('stamp-layer').appendChild(el);
         setTimeout(() => el.remove(), 2000);
     });
@@ -290,21 +265,11 @@
     socket.on('error', (data) => { alert(data.msg); });
 
     socket.on('update_state', (state) => {
-        // スコア変動計算用に前回の状態と比較したいが、state更新前に保存
-        // 簡易的にここで差分計算せず、レンダリング時に計算済みデータを使う
-        // state.players のデータ構造に前回のスコアが含まれていないので、
-        // フロントエンドで「ゲーム開始時」または「前回更新時」のスコアを覚えておく必要がある
-        
         if(!state.game_over) {
-            // ゲーム中なら現在のスコアをベースとして保存
             state.players.forEach(p => {
-                // まだ記録してない、またはゲームリセット直後なら初期化
-                if(prevScores[p.id] === undefined || state.turn === 0) { 
-                   // prevScores[p.id] = p.score; // ここは難しい。リザルトで計算する。
-                }
+                if(prevScores[p.id] === undefined || state.turn === 0) {}
             });
         }
-        
         gameState = state;
         if(state.room_id) currentRoom = state.room_id;
 
@@ -313,7 +278,6 @@
             document.getElementById('wait-screen').classList.remove('hidden');
             document.getElementById('game-screen').classList.add('hidden');
             updateLobby(state);
-            // ゲーム開始前なのでスコア記録をリセット
             state.players.forEach(p => prevScores[p.id] = p.score);
         } else {
             document.getElementById('wait-screen').classList.add('hidden');
@@ -331,7 +295,6 @@
                 <div class="font-bold text-xs mt-1 truncate w-16 mx-auto">${p.name}</div>
             </div>
         `).join('');
-        
         if(state.players.length >= 2) document.getElementById('btn-start').classList.remove('hidden');
         else document.getElementById('btn-start').classList.add('hidden');
     }
@@ -347,7 +310,6 @@
         const isMyTurn = (state.turn === state.my_idx);
         document.body.className = isMyTurn ? 'bg-my-turn text-white flex flex-col h-[100dvh]' : 'bg-wait text-white flex flex-col h-[100dvh]';
 
-        // ログ
         const logArea = document.getElementById('game-log');
         logArea.innerHTML = [...state.logs].reverse().map(log => {
             let dispLog = log.replace(" played", "").replace(" passed", " pass").replace(" joined", " in");
@@ -356,12 +318,10 @@
         }).join('');
         logArea.scrollTop = 0;
 
-        // 他プレイヤー
         const oppArea = document.getElementById('opponents-area');
         oppArea.innerHTML = state.players.filter(p => !p.is_me).map(p => {
             const isTurn = (state.turn === p.id);
             const isParent = (state.parent === p.id);
-            // 他プレイヤーのIDと名前を紐付けるためにdata属性追加
             return `
                 <div class="flex flex-col items-center transition-all ${isTurn ? 'scale-110 opacity-100' : 'opacity-60'}" id="p-area-${p.id}">
                     <div class="relative w-8 h-8 sm:w-12 sm:h-12 mb-1">
@@ -381,7 +341,6 @@
             `;
         }).join('');
 
-        // フィールド
         const fieldDiv = document.getElementById('field-cards');
         fieldDiv.innerHTML = state.field.map((c, i) => renderCard(c, false, i)).join('');
         
@@ -394,7 +353,6 @@
             ownerLabel.classList.add('opacity-0');
         }
 
-        // Target Rank
         let targetText = "ANY";
         let nextRankVal = -1;
         if(state.field.length > 0) {
@@ -408,7 +366,6 @@
         }
         document.getElementById('target-rank').innerText = targetText;
 
-        // 手札周り更新
         document.getElementById('my-score').innerText = state.my_score;
         if(state.parent === state.my_idx) document.getElementById('parent-badge').classList.remove('hidden');
         else document.getElementById('parent-badge').classList.add('hidden');
@@ -423,12 +380,10 @@
                 else if(nextRankVal !== -1) isPlayable = (c.rank===nextRankVal || c.rank===99);
                 else if(targetText==="FREE") isPlayable = true;
             }
-            
             let classes = `card-base w-14 h-20 sm:w-16 sm:h-24 flex flex-col items-center justify-center cursor-pointer `;
             if(isSel) classes += "selected ";
             else if(isPlayable) classes += "hint-blue ";
             const style = `margin-left: -18px; z-index:${i}; transform: rotate(${(i-state.my_hand.length/2)*2.5}deg) translateY(${isSel?-20:0}px);`;
-
             return `<div onclick="toggle(${i})" class="${classes}" style="${style}">
                 <div class="card-pattern"></div>
                 <div class="card-inner-border"></div>
@@ -436,7 +391,6 @@
             </div>`;
         }).join('');
 
-        // ボタン
         const pBtn = document.getElementById('btn-play');
         const passBtn = document.getElementById('btn-pass');
         if(isMyTurn) {
@@ -448,18 +402,15 @@
             passBtn.disabled = true; passBtn.classList.add('opacity-50');
         }
 
-        // --- 終了処理 & 派手な演出 ---
         if(state.game_over) {
             document.getElementById('modal-overlay').classList.remove('hidden');
             document.getElementById('modal-overlay').classList.add('flex');
             
-            // 2. リザルト詳細表示
             document.getElementById('modal-scores').innerHTML = state.players.map(p => {
                 const prev = prevScores[p.id] !== undefined ? prevScores[p.id] : 0;
                 const diff = p.score - prev;
                 const diffClass = diff > 0 ? "text-green-400" : (diff < 0 ? "text-red-400" : "text-gray-400");
                 const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
-                
                 return `
                 <div class="flex justify-between items-center py-2 border-b border-gray-700 text-white">
                     <div class="flex flex-col">
@@ -473,30 +424,19 @@
                 `;
             }).join('');
 
-            // 4. 勝利演出 (自分が勝った場合、または誰かが勝った祝い)
-            // 勝者判定: スコアが増えた人＝勝者（このゲームのルールでは敗者払いなので勝者のみプラス）
-            const winner = state.players.reduce((prev, current) => (prev.score > current.score) ? prev : current); // 簡易判定:一番点高い人
-            
-            // 今回の変動がプラスなら花火
             const myDiff = state.my_score - (prevScores[state.my_idx] || 0);
-            if(myDiff > 0) {
-                launchConfetti();
-            }
-
+            if(myDiff > 0) launchConfetti();
         } else {
             document.getElementById('modal-overlay').classList.add('hidden');
             document.getElementById('modal-overlay').classList.remove('flex');
         }
     }
 
-    // --- 4. 派手な演出 (Confetti) ---
     function launchConfetti() {
         var duration = 3 * 1000;
         var animationEnd = Date.now() + duration;
         var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 60 };
-
         function randomInRange(min, max) { return Math.random() * (max - min) + min; }
-
         var interval = setInterval(function() {
             var timeLeft = animationEnd - Date.now();
             if (timeLeft <= 0) return clearInterval(interval);
