@@ -17,11 +17,11 @@
         .font-casino { font-family: 'Cinzel', serif; }
         .bg-my-turn { background: radial-gradient(circle at center, #065f46 0%, #022c22 100%); }
         .bg-wait { background: radial-gradient(circle at center, #1e293b 0%, #020617 100%); }
-        .card-base { background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%); border-radius: 4px; box-shadow: 1px 2px 4px rgba(0,0,0,0.3); border: 1px solid #e5e7eb; transition: transform 0.1s; }
-        .card.selected { transform: translateY(-15px) scale(1.05) !important; z-index: 30; border-color: #facc15; box-shadow: 0 0 10px rgba(250, 204, 21, 0.8); }
-        .card-back { background: repeating-linear-gradient(45deg, #b91c1c, #b91c1c 5px, #991b1b 5px, #991b1b 10px); border: 1px solid #fff; border-radius: 3px; }
-        .hint-blue { box-shadow: 0 0 6px #3b82f6; border-color: #3b82f6; }
-        .log-area::-webkit-scrollbar { width: 4px; }
+        .card-base { background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%); border-radius: 4px; box-shadow: 1px 1px 3px rgba(0,0,0,0.3); border: 1px solid #e5e7eb; transition: transform 0.1s; }
+        .card.selected { transform: translateY(-12px) scale(1.05) !important; z-index: 30; border-color: #facc15; box-shadow: 0 0 8px rgba(250, 204, 21, 0.8); }
+        .card-back { background: repeating-linear-gradient(45deg, #b91c1c, #b91c1c 5px, #991b1b 5px, #991b1b 10px); border: 1px solid #fff; border-radius: 2px; }
+        .hint-blue { box-shadow: 0 0 5px #3b82f6; border-color: #3b82f6; }
+        .log-area::-webkit-scrollbar { width: 3px; }
         .log-area::-webkit-scrollbar-thumb { background-color: #4b5563; }
         @keyframes floatUp { 0% {transform:translateY(0) scale(0.5);opacity:0} 20%{transform:translateY(-20px) scale(1.2);opacity:1} 100%{transform:translateY(-80px) scale(0.8);opacity:0}}
         .stamp-anim { animation: floatUp 2s ease-out forwards; pointer-events: none; }
@@ -54,47 +54,47 @@
 
     <div id="game-screen" class="hidden flex-grow flex flex-row h-full w-full overflow-hidden">
         <div class="flex-grow flex flex-col relative h-full min-w-0">
-            <div class="flex justify-between items-center px-2 h-10 shrink-0 bg-black/20">
-                <div class="text-lg text-yellow-500 font-casino truncate">Getsurai <span class="text-[10px] text-gray-400" id="room-display"></span></div>
+            <div class="flex justify-between items-center px-2 h-8 shrink-0 bg-black/20">
+                <div class="text-base text-yellow-500 font-casino truncate">Getsurai <span id="room-display" class="text-[10px] text-gray-400"></span></div>
                 <div class="flex gap-2 items-center">
-                    <div class="bg-black/40 px-2 py-0.5 rounded-full text-[10px] text-gray-400">DECK <span id="deck-count" class="text-white font-bold">0</span></div>
-                    <button onclick="document.getElementById('rule-modal').classList.remove('hidden')" class="bg-gray-700 text-white px-2 py-0.5 rounded text-[10px]">RULES</button>
+                    <div class="bg-black/40 px-2 py-0.5 rounded-full text-[9px] text-gray-400">DECK <span id="deck-count" class="text-white font-bold">0</span></div>
+                    <button onclick="document.getElementById('rule-modal').classList.remove('hidden')" class="bg-gray-700 text-white px-2 py-0.5 rounded text-[9px]">RULES</button>
                 </div>
             </div>
 
-            <div id="opponents-area" class="flex justify-around items-start w-full h-14 shrink-0 mt-1"></div>
+            <div id="opponents-area" class="flex justify-around items-start w-full h-12 shrink-0 mt-1"></div>
 
             <div class="flex-grow flex flex-col items-center justify-center relative min-h-0">
                 <div class="text-[9px] tracking-widest text-yellow-200 opacity-80">NEXT <span id="target-rank" class="text-lg font-casino font-bold text-white ml-1">-</span></div>
-                <div id="field-container" class="relative w-full h-20 flex flex-col items-center justify-center">
+                <div id="field-container" class="relative w-full h-16 flex flex-col items-center justify-center">
                     <div id="field-cards" class="flex -space-x-8 z-10 scale-90"></div>
-                    <div id="field-owner-label" class="mt-1 opacity-0 bg-black/50 px-2 py-0.5 rounded-full text-[9px] text-yellow-300">Played by: -</div>
+                    <div id="field-owner-label" class="mt-1 opacity-0 bg-black/50 px-2 py-0.5 rounded-full text-[8px] text-yellow-300">Played by: -</div>
                 </div>
             </div>
 
-            <div class="w-full flex flex-col items-center pb-2 shrink-0 bg-gradient-to-t from-black/60 to-transparent relative">
-                <div class="absolute right-2 -top-8 z-40">
-                    <button onclick="document.getElementById('stamp-menu').classList.toggle('hidden')" class="w-8 h-8 rounded-full bg-gray-800 border border-gray-500 text-lg flex items-center justify-center">😊</button>
-                    <div id="stamp-menu" class="hidden absolute bottom-9 right-0 bg-gray-800 border border-gray-600 rounded p-1 grid grid-cols-4 gap-1 w-40 shadow-xl"></div>
+            <div class="w-full flex flex-col items-center pb-2 shrink-0 bg-gradient-to-t from-black/70 to-transparent relative">
+                <div class="absolute right-1 -top-6 z-40">
+                    <button onclick="document.getElementById('stamp-menu').classList.toggle('hidden')" class="w-6 h-6 rounded-full bg-gray-800 border border-gray-500 text-sm flex items-center justify-center">😊</button>
+                    <div id="stamp-menu" class="hidden absolute bottom-7 right-0 bg-gray-800 border border-gray-600 rounded p-1 grid grid-cols-4 gap-1 w-32 shadow-xl"></div>
                 </div>
 
-                <div class="mb-1 flex items-center gap-2 bg-gray-900/80 border border-yellow-500/30 px-3 py-0.5 rounded-full">
-                    <span class="text-[9px] text-yellow-500">SCORE</span>
-                    <span id="my-score" class="text-sm font-mono font-bold text-white">0</span>
+                <div class="flex items-center gap-2 bg-gray-900/80 border border-yellow-500/30 px-2 py-0.5 rounded-full mb-1">
+                    <span class="text-[8px] text-yellow-500">SCORE</span>
+                    <span id="my-score" class="text-xs font-mono font-bold text-white">0</span>
                     <span id="parent-badge" class="hidden bg-red-600 text-[8px] px-1 rounded text-white font-bold">DEALER</span>
                 </div>
 
-                <div id="my-hand" class="flex justify-center -space-x-5 px-2 h-20 items-end mb-1 w-full"></div>
+                <div id="my-hand" class="flex justify-center -space-x-4 px-2 h-16 items-end mb-1 w-full"></div>
 
-                <div class="flex justify-center gap-3 h-10 w-full px-4">
-                    <button id="btn-play" onclick="playCards()" class="hidden w-1/2 bg-blue-600 active:bg-blue-400 text-white font-bold rounded shadow-lg text-sm">PLAY</button>
-                    <button id="btn-pass" onclick="passTurn()" class="w-1/2 bg-gray-700 active:bg-gray-500 text-gray-300 font-bold rounded shadow-lg text-sm">PASS</button>
+                <div class="flex justify-center gap-2 h-9 w-full px-2">
+                    <button id="btn-play" onclick="playCards()" class="hidden w-1/2 bg-blue-600 active:bg-blue-400 text-white font-bold rounded shadow-lg text-xs tracking-widest">PLAY</button>
+                    <button id="btn-pass" onclick="passTurn()" class="w-1/2 bg-gray-700 active:bg-gray-500 text-gray-300 font-bold rounded shadow-lg text-xs tracking-widest">PASS</button>
                 </div>
             </div>
         </div>
 
-        <div class="w-20 sm:w-48 bg-gray-900 border-l border-gray-700 flex flex-col shrink-0">
-            <div id="game-log" class="flex-grow p-1 overflow-y-auto log-area space-y-1 text-[9px] font-mono text-gray-300 break-words leading-tight"></div>
+        <div class="w-16 sm:w-32 bg-gray-900 border-l border-gray-700 flex flex-col shrink-0">
+            <div id="game-log" class="flex-grow p-1 overflow-y-auto log-area space-y-1 text-[8px] font-mono text-gray-300 break-words leading-tight"></div>
         </div>
     </div>
 
@@ -119,7 +119,7 @@
 <script>
     const socket = io();
     let currentRoom="", myName="", gameState={}, prevScores={}, selectedIndices=[];
-    const SUITS={'♠':'♠','♥':'♥','♦':'♦','♣':'♣','JK':'🤡'}, STAMPS=['👍','👎','😂','😭','😡','🤔','🎉','ﾌﾞｼｬｰ'];
+    const SUITS={'♠':'♠','♥':'♥','♦':'♦','♣':'♣','JK':'🤡'}, STAMPS=['👍','👎','😂','😭','😡','🤔','ざわ･･･','ﾌﾞｼｬｰ'];
 
     window.onload = () => {
         const sn=localStorage.getItem('g_n'), sr=localStorage.getItem('g_r');
@@ -128,7 +128,7 @@
         const m = document.getElementById('stamp-menu');
         STAMPS.forEach(s=>{
             const b=document.createElement('button');
-            b.innerText=s; b.className="text-xl hover:scale-110";
+            b.innerText=s; b.className="text-lg hover:scale-110";
             b.onclick=()=>{socket.emit('send_stamp',{room:currentRoom,stamp_id:s}); m.classList.add('hidden');};
             m.appendChild(b);
         });
@@ -181,6 +181,11 @@
         else document.getElementById('btn-start').classList.add('hidden');
     }
 
+    function getRankName(r) {
+        if(r===11)return'J'; if(r===12)return'Q'; if(r===13)return'K'; if(r===14)return'A'; if(r===15)return'2'; if(r===99)return'JK';
+        return r;
+    }
+
     function renderGame(s){
         document.getElementById('room-display').innerText=`${currentRoom}`;
         document.getElementById('deck-count').innerText=s.deck_count;
@@ -201,9 +206,9 @@
                     <span>${p.is_cpu?'🤖':'👤'}</span>
                     ${s.parent===p.id?'<span class="absolute -top-1 -right-1 text-[8px]">👑</span>':''}
                 </div>
-                <div class="text-[8px] truncate w-12 text-center mt-1">${p.name}</div>
-                <div class="flex -space-x-1 mt-1 h-6">
-                    ${Array(Math.min(p.hand_count,10)).fill(0).map(()=>`<div class="w-3 h-5 bg-red-800 border border-white rounded-[1px]"></div>`).join('')}
+                <div class="text-[8px] truncate w-12 text-center mt-0.5">${p.name}</div>
+                <div class="flex -space-x-1 mt-0.5 h-5">
+                    ${Array(Math.min(p.hand_count,10)).fill(0).map(()=>`<div class="w-3 h-4 bg-red-800 border border-white rounded-[1px]"></div>`).join('')}
                 </div>
                 <div class="text-[8px] text-gray-400">${p.score}</div>
             </div>
@@ -211,9 +216,9 @@
 
         // Field
         document.getElementById('field-cards').innerHTML=s.field.map((c,i)=>
-            `<div class="card-base w-10 h-14 flex flex-col items-center justify-center" style="margin-left:${i===0?0:-20}px;transform:rotate(${(Math.random()-0.5)*5}deg)">
-                <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} font-bold text-lg leading-none">${[11,12,13,14,15,99].includes(c.rank)?{11:'J',12:'Q',13:'K',14:'A',15:'2',99:'JK'}[c.rank]:c.rank}</span>
-                <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} text-xs">${SUITS[c.suit]}</span>
+            `<div class="card-base w-9 h-12 flex flex-col items-center justify-center" style="margin-left:${i===0?0:-20}px;transform:rotate(${(Math.random()-0.5)*5}deg)">
+                <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} font-bold text-base leading-none">${[11,12,13,14,15,99].includes(c.rank)?{11:'J',12:'Q',13:'K',14:'A',15:'2',99:'JK'}[c.rank]:c.rank}</span>
+                <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} text-[8px]">${SUITS[c.suit]}</span>
             </div>`
         ).join('');
         document.getElementById('field-owner-label').style.opacity = s.field.length?'1':'0';
@@ -231,11 +236,10 @@
         const myTurn = (s.turn===s.my_idx);
         document.getElementById('my-hand').innerHTML=s.my_hand.map((c,i)=>{
             const sel=selectedIndices.includes(i);
-            // 簡易ヒント: 出せるかわからないので全部青、ただし選択中は黄色
-            let cls = `card-base w-12 h-16 flex flex-col items-center justify-center cursor-pointer ${sel?'selected':(myTurn?'hint-blue':'')}`;
+            let cls = `card-base w-11 h-16 flex flex-col items-center justify-center cursor-pointer ${sel?'selected':(myTurn?'hint-blue':'')}`;
             return `<div onclick="toggle(${i})" class="${cls}" style="margin-left:-20px;z-index:${i};transform:rotate(${(i-s.my_hand.length/2)*3}deg) translateY(${sel?-20:0}px)">
-                 <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} font-bold text-xl leading-none">${[11,12,13,14,15,99].includes(c.rank)?{11:'J',12:'Q',13:'K',14:'A',15:'2',99:'JK'}[c.rank]:c.rank}</span>
-                 <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} text-sm">${SUITS[c.suit]}</span>
+                 <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} font-bold text-lg leading-none">${[11,12,13,14,15,99].includes(c.rank)?{11:'J',12:'Q',13:'K',14:'A',15:'2',99:'JK'}[c.rank]:c.rank}</span>
+                 <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} text-[10px]">${SUITS[c.suit]}</span>
             </div>`
         }).join('');
 
@@ -270,4 +274,3 @@
 </script>
 </body>
 </html>
-
