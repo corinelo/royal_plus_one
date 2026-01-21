@@ -4,13 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Getsurai</title>
+
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon.png') }}">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
+    
     <style>
         body { 
             font-family: 'Roboto Mono', monospace; 
@@ -18,6 +22,7 @@
             overflow: hidden; 
             height: 100dvh; 
             width: 100vw;
+            touch-action: manipulation;
         }
         .font-casino { font-family: 'Cinzel', serif; }
         .font-rank { font-family: sans-serif; font-weight: 800; }
@@ -34,7 +39,7 @@
             transition: transform 0.1s;
             user-select: none;
         }
-        .card.selected { transform: translateY(-20px) scale(1.05) !important; z-index: 30; box-shadow: 0 0 10px rgba(250, 204, 21, 0.8); border-color: #facc15; }
+        .card.selected { transform: translateY(-20px) scale(1.05) !important; z-index: 30; box-shadow: 0 0 15px rgba(250, 204, 21, 0.8); border-color: #facc15; }
         
         .card-back {
             background: repeating-linear-gradient(45deg, #b91c1c, #b91c1c 5px, #991b1b 5px, #991b1b 10px);
@@ -42,19 +47,31 @@
             border-radius: 3px;
         }
         .hint-blue { box-shadow: 0 0 8px #3b82f6; border-color: #3b82f6; }
-        .hint-red { box-shadow: 0 0 8px #ef4444; border-color: #ef4444; }
-
+        
         .log-area { scrollbar-width: thin; scrollbar-color: #4b5563 #1f2937; }
         .log-area::-webkit-scrollbar { width: 4px; }
         .log-area::-webkit-scrollbar-track { background: #1f2937; }
         .log-area::-webkit-scrollbar-thumb { background-color: #4b5563; border-radius: 2px; }
+
+        /* スタンプアニメーション */
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(0.5); opacity: 0; }
+            20% { transform: translateY(-20px) scale(1.2); opacity: 1; }
+            80% { transform: translateY(-50px) scale(1); opacity: 1; }
+            100% { transform: translateY(-80px) scale(0.8); opacity: 0; }
+        }
+        .stamp-anim { animation: floatUp 2s ease-out forwards; pointer-events: none; }
     </style>
 </head>
 <body class="bg-wait text-white flex flex-col">
 
+    <div id="stamp-layer" class="absolute inset-0 pointer-events-none z-[45] overflow-hidden"></div>
+
     <div id="lobby-screen" class="absolute inset-0 z-50 flex items-center justify-center bg-black/95 p-4">
         <div class="bg-gray-800 p-6 rounded-xl shadow-2xl border border-yellow-500/30 text-center max-w-md w-full">
-            <h1 class="text-3xl font-casino text-yellow-500 mb-4">Getsurai</h1>
+            <h1 class="text-4xl font-casino text-yellow-500 mb-2">Getsurai</h1>
+            <p class="text-xs text-gray-400 mb-6 tracking-widest">- Royal +1 Strategy -</p>
+
             <input type="text" id="username" placeholder="Your Name" class="w-full bg-gray-700 p-3 rounded mb-4 text-white border border-gray-600 focus:border-yellow-500 outline-none">
             
             <div class="space-y-3">
@@ -66,7 +83,7 @@
                 <div>
                     <input type="text" id="room-id" placeholder="Room ID" class="w-full bg-gray-700 p-3 rounded mb-2 text-white border border-gray-600 focus:border-yellow-500 outline-none">
                     <button onclick="joinGame()" class="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-bold py-3 rounded transition shadow-lg">
-                        JOIN ONLINE
+                        JOIN / RECONNECT
                     </button>
                 </div>
             </div>
@@ -85,7 +102,11 @@
         <div class="flex-grow flex flex-col relative h-full">
             
             <div class="flex justify-between items-center px-2 py-1 z-10 bg-black/20 h-10 shrink-0">
-                <div class="text-lg text-yellow-500 font-casino truncate">Gets <span class="text-[10px] text-gray-400" id="room-display"></span></div>
+                <div class="text-lg text-yellow-500 font-casino truncate">
+                    <span class="sm:hidden">Gets</span>
+                    <span class="hidden sm:inline">Getsurai</span>
+                    <span class="text-[10px] text-gray-400" id="room-display"></span>
+                </div>
                 <div class="flex gap-2 items-center">
                     <div class="flex items-center gap-1 bg-black/40 px-2 py-0.5 rounded-full border border-white/10">
                         <span class="text-[9px] text-gray-400">DECK</span>
@@ -95,7 +116,7 @@
                 </div>
             </div>
 
-            <div id="opponents-area" class="flex justify-around items-start w-full px-1 h-16 shrink-0 mt-1"></div>
+            <div id="opponents-area" class="flex justify-around items-start w-full px-1 h-16 shrink-0 mt-1 relative"></div>
 
             <div class="flex-grow flex flex-col items-center justify-center relative min-h-0">
                 <div class="text-center opacity-80 mb-1">
@@ -108,8 +129,14 @@
                 </div>
             </div>
 
-            <div class="w-full flex flex-col items-center pb-2 sm:pb-4 shrink-0 bg-gradient-to-t from-black/60 to-transparent">
+            <div class="w-full flex flex-col items-center pb-2 sm:pb-4 shrink-0 bg-gradient-to-t from-black/60 to-transparent relative">
                 
+                <div class="absolute right-2 bottom-12 sm:bottom-16 z-40">
+                    <button onclick="toggleStampMenu()" class="w-10 h-10 rounded-full bg-gray-800 border border-gray-600 text-xl shadow-lg flex items-center justify-center hover:bg-gray-700 transition">😊</button>
+                    <div id="stamp-menu" class="hidden absolute bottom-12 right-0 bg-gray-800 border border-gray-600 rounded-lg p-2 grid grid-cols-4 gap-2 w-48 shadow-2xl">
+                        </div>
+                </div>
+
                 <div class="mb-1 flex items-center gap-2 bg-gray-900/80 border border-yellow-500/30 px-3 py-0.5 rounded-full">
                     <span class="text-[9px] text-yellow-500">SCORE</span>
                     <span id="my-score" class="text-sm font-mono font-bold text-white">0</span>
@@ -133,11 +160,11 @@
 
     <div id="rule-modal" class="fixed inset-0 bg-black/90 z-[60] hidden flex items-center justify-center p-4" onclick="this.classList.add('hidden')">
         <div class="bg-gray-800 text-gray-200 p-6 rounded-lg max-w-lg w-full max-h-[80vh] overflow-y-auto border border-yellow-500/30" onclick="event.stopPropagation()">
-            <h2 class="text-xl font-casino text-yellow-500 mb-2 border-b border-gray-600 pb-2">Rules</h2>
+            <h2 class="text-xl font-casino text-yellow-500 mb-2 border-b border-gray-600 pb-2">Getsurai Rules</h2>
             <div class="space-y-3 text-xs sm:text-sm font-sans">
-                <p><strong>Core Rule:</strong> Play cards exactly <strong>Rank +1</strong> higher.<br>(Field 5 -> Play 6)</p>
+                <p><strong>Core Rule (+1):</strong> Play cards exactly <strong>Rank +1</strong> higher.</p>
                 <ul class="list-disc list-inside ml-2">
-                    <li><strong>2:</strong> Strongest Single. Plays anytime on Single. Clears field.</li>
+                    <li><strong>2:</strong> Strongest. Clears field.</li>
                     <li><strong>8:</strong> Clears field immediately.</li>
                     <li><strong>JOKER:</strong> Wildcard.</li>
                 </ul>
@@ -149,10 +176,19 @@
         </div>
     </div>
 
-    <div id="modal-overlay" class="fixed inset-0 bg-black/95 z-50 hidden flex flex-col items-center justify-center">
-        <h2 class="text-5xl font-casino text-yellow-400 mb-6">FINISH!!</h2>
-        <div id="modal-scores" class="w-full max-w-sm bg-gray-900 p-4 rounded-lg mb-6"></div>
-        <button onclick="reqNextGame()" class="bg-white text-black font-bold py-3 px-8 rounded-full hover:bg-yellow-400 text-lg">NEXT GAME</button>
+    <div id="modal-overlay" class="fixed inset-0 bg-black/95 z-50 hidden flex flex-col items-center justify-center p-4">
+        <h2 class="text-5xl font-casino text-yellow-400 mb-6 drop-shadow-[0_0_15px_rgba(250,204,21,0.5)] animate-pulse">FINISH!!</h2>
+        
+        <div id="modal-scores" class="w-full max-w-sm bg-gray-900 p-4 rounded-lg mb-8 border border-gray-700"></div>
+        
+        <div class="flex flex-col gap-4 w-full max-w-xs">
+            <button onclick="reqNextGame()" class="bg-white text-black font-bold py-3 rounded-full hover:bg-yellow-400 transition shadow-lg text-lg tracking-wider">
+                NEXT GAME <span class="text-xs block font-normal opacity-70">(Keep Scores)</span>
+            </button>
+            <button onclick="reqResetGame()" class="bg-red-900 text-white font-bold py-3 rounded-full hover:bg-red-700 transition shadow-lg text-lg border border-red-700 tracking-wider">
+                RESET & RESTART <span class="text-xs block font-normal opacity-70">(Score 0)</span>
+            </button>
+        </div>
     </div>
 
 <script>
@@ -160,13 +196,38 @@
     let currentRoom = "";
     let myName = "";
     let gameState = {};
+    let prevScores = {}; // 前回のスコアを保持
     let selectedIndices = [];
     const SUITS = {'♠':'♠', '♥':'♥', '♦':'♦', '♣':'♣', 'JK':'🤡'};
+    const STAMPS = ['👍', '👎', '😂', '😭', '😡', '🤔', '🎉', '😎'];
+
+    // --- 1. 復帰サポート (LocalStorage) ---
+    window.onload = function() {
+        const savedName = localStorage.getItem('gets_name');
+        const savedRoom = localStorage.getItem('gets_room');
+        if(savedName) document.getElementById('username').value = savedName;
+        if(savedRoom) document.getElementById('room-id').value = savedRoom;
+        
+        // スタンプメニュー生成
+        const menu = document.getElementById('stamp-menu');
+        STAMPS.forEach(s => {
+            const btn = document.createElement('button');
+            btn.className = "text-2xl hover:scale-125 transition active:scale-95";
+            btn.innerText = s;
+            btn.onclick = () => sendStamp(s);
+            menu.appendChild(btn);
+        });
+    };
 
     function joinGame() {
         const name = document.getElementById('username').value || "Guest";
         const room = document.getElementById('room-id').value;
         if(!room) { alert("Please enter Room ID"); return; }
+        
+        // 保存
+        localStorage.setItem('gets_name', name);
+        localStorage.setItem('gets_room', room);
+
         myName = name;
         currentRoom = room;
         socket.emit('join_game', {room: room, name: name});
@@ -182,9 +243,68 @@
         socket.emit('start_game', {room: currentRoom});
     }
 
+    // --- 3. スタンプ機能 ---
+    function toggleStampMenu() {
+        document.getElementById('stamp-menu').classList.toggle('hidden');
+    }
+
+    function sendStamp(stampId) {
+        socket.emit('send_stamp', {room: currentRoom, stamp_id: stampId});
+        toggleStampMenu();
+    }
+
+    socket.on('receive_stamp', (data) => {
+        const sid = data.sid;
+        const stamp = data.stamp_id;
+        
+        // 送信元の位置を探す
+        let targetEl = null;
+        if (gameState.players) {
+            const p = gameState.players.find(pl => pl.sid === sid); // sidはBackendで送る必要あり ※
+            // 簡易的に自分かどうかで判定
+            if(sid === socket.id) {
+                targetEl = document.getElementById('my-hand');
+            } else {
+                // 他プレイヤーエリアから探す(簡易実装)
+                targetEl = document.getElementById('opponents-area');
+            }
+        }
+        
+        if(!targetEl) targetEl = document.body;
+
+        const rect = targetEl.getBoundingClientRect();
+        const el = document.createElement('div');
+        el.innerText = stamp;
+        el.className = "absolute text-4xl stamp-anim z-[50]";
+        // ざっくり位置決め
+        const left = rect.left + rect.width / 2;
+        const top = rect.top + rect.height / 2;
+        
+        el.style.left = (left - 20) + 'px';
+        el.style.top = (top - 20) + 'px';
+
+        document.getElementById('stamp-layer').appendChild(el);
+        setTimeout(() => el.remove(), 2000);
+    });
+
     socket.on('error', (data) => { alert(data.msg); });
 
     socket.on('update_state', (state) => {
+        // スコア変動計算用に前回の状態と比較したいが、state更新前に保存
+        // 簡易的にここで差分計算せず、レンダリング時に計算済みデータを使う
+        // state.players のデータ構造に前回のスコアが含まれていないので、
+        // フロントエンドで「ゲーム開始時」または「前回更新時」のスコアを覚えておく必要がある
+        
+        if(!state.game_over) {
+            // ゲーム中なら現在のスコアをベースとして保存
+            state.players.forEach(p => {
+                // まだ記録してない、またはゲームリセット直後なら初期化
+                if(prevScores[p.id] === undefined || state.turn === 0) { 
+                   // prevScores[p.id] = p.score; // ここは難しい。リザルトで計算する。
+                }
+            });
+        }
+        
         gameState = state;
         if(state.room_id) currentRoom = state.room_id;
 
@@ -193,6 +313,8 @@
             document.getElementById('wait-screen').classList.remove('hidden');
             document.getElementById('game-screen').classList.add('hidden');
             updateLobby(state);
+            // ゲーム開始前なのでスコア記録をリセット
+            state.players.forEach(p => prevScores[p.id] = p.score);
         } else {
             document.getElementById('wait-screen').classList.add('hidden');
             document.getElementById('game-screen').classList.remove('hidden');
@@ -228,7 +350,6 @@
         // ログ
         const logArea = document.getElementById('game-log');
         logArea.innerHTML = [...state.logs].reverse().map(log => {
-            // 名前を短縮表示
             let dispLog = log.replace(" played", "").replace(" passed", " pass").replace(" joined", " in");
             const color = log.includes(myName) || log.includes("YOU") ? "text-yellow-400" : "text-gray-400";
             return `<div class="${color} border-b border-gray-800 pb-1 mb-1">${dispLog}</div>`;
@@ -240,13 +361,9 @@
         oppArea.innerHTML = state.players.filter(p => !p.is_me).map(p => {
             const isTurn = (state.turn === p.id);
             const isParent = (state.parent === p.id);
-            let handHTML = '';
-            for(let i=0; i<p.hand_count; i++) {
-                if(i>=10) break; 
-                handHTML += `<div class="card-back absolute w-4 h-6 sm:w-6 sm:h-10" style="left:${i*6}px; top:0;"></div>`;
-            }
+            // 他プレイヤーのIDと名前を紐付けるためにdata属性追加
             return `
-                <div class="flex flex-col items-center transition-all ${isTurn ? 'scale-110 opacity-100' : 'opacity-60'}">
+                <div class="flex flex-col items-center transition-all ${isTurn ? 'scale-110 opacity-100' : 'opacity-60'}" id="p-area-${p.id}">
                     <div class="relative w-8 h-8 sm:w-12 sm:h-12 mb-1">
                         <div class="w-full h-full rounded-full bg-gray-700 border-2 ${isTurn ? 'border-yellow-400 shadow-[0_0_10px_gold]' : 'border-gray-500'} flex items-center justify-center relative">
                             <span class="text-sm sm:text-lg">${p.is_cpu ? '🤖' : '👤'}</span>
@@ -254,7 +371,11 @@
                         </div>
                         <div class="absolute -bottom-2 w-full text-center"><span class="bg-black text-[8px] px-1 rounded truncate w-12 block mx-auto">${p.name}</span></div>
                     </div>
-                    <div class="relative h-6 sm:h-10 mt-1 w-16 sm:w-20">${handHTML}</div>
+                    <div class="relative h-6 sm:h-10 mt-1 w-16 sm:w-20">
+                        ${Array(Math.min(p.hand_count, 10)).fill(0).map((_,i) => 
+                            `<div class="card-back absolute w-4 h-6 sm:w-6 sm:h-10" style="left:${i*6}px; top:0;"></div>`
+                        ).join('')}
+                    </div>
                     <div class="text-[8px] text-gray-400">Score: ${p.score}</div>
                 </div>
             `;
@@ -303,11 +424,9 @@
                 else if(targetText==="FREE") isPlayable = true;
             }
             
-            // 手札カードサイズ
             let classes = `card-base w-14 h-20 sm:w-16 sm:h-24 flex flex-col items-center justify-center cursor-pointer `;
             if(isSel) classes += "selected ";
             else if(isPlayable) classes += "hint-blue ";
-            
             const style = `margin-left: -18px; z-index:${i}; transform: rotate(${(i-state.my_hand.length/2)*2.5}deg) translateY(${isSel?-20:0}px);`;
 
             return `<div onclick="toggle(${i})" class="${classes}" style="${style}">
@@ -329,20 +448,62 @@
             passBtn.disabled = true; passBtn.classList.add('opacity-50');
         }
 
-        // モーダル
+        // --- 終了処理 & 派手な演出 ---
         if(state.game_over) {
             document.getElementById('modal-overlay').classList.remove('hidden');
             document.getElementById('modal-overlay').classList.add('flex');
-            document.getElementById('modal-scores').innerHTML = state.players.map(p => `
+            
+            // 2. リザルト詳細表示
+            document.getElementById('modal-scores').innerHTML = state.players.map(p => {
+                const prev = prevScores[p.id] !== undefined ? prevScores[p.id] : 0;
+                const diff = p.score - prev;
+                const diffClass = diff > 0 ? "text-green-400" : (diff < 0 ? "text-red-400" : "text-gray-400");
+                const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
+                
+                return `
                 <div class="flex justify-between items-center py-2 border-b border-gray-700 text-white">
-                    <span>${p.name} ${state.parent===p.id?'👑':''}</span>
-                    <span class="font-mono text-xl">${p.score}</span>
+                    <div class="flex flex-col">
+                        <span>${p.name} ${state.parent===p.id?'👑':''}</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs ${diffClass} mr-2">(${diffStr})</span>
+                        <span class="font-mono text-xl font-bold">${p.score}</span>
+                    </div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
+
+            // 4. 勝利演出 (自分が勝った場合、または誰かが勝った祝い)
+            // 勝者判定: スコアが増えた人＝勝者（このゲームのルールでは敗者払いなので勝者のみプラス）
+            const winner = state.players.reduce((prev, current) => (prev.score > current.score) ? prev : current); // 簡易判定:一番点高い人
+            
+            // 今回の変動がプラスなら花火
+            const myDiff = state.my_score - (prevScores[state.my_idx] || 0);
+            if(myDiff > 0) {
+                launchConfetti();
+            }
+
         } else {
             document.getElementById('modal-overlay').classList.add('hidden');
             document.getElementById('modal-overlay').classList.remove('flex');
         }
+    }
+
+    // --- 4. 派手な演出 (Confetti) ---
+    function launchConfetti() {
+        var duration = 3 * 1000;
+        var animationEnd = Date.now() + duration;
+        var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 60 };
+
+        function randomInRange(min, max) { return Math.random() * (max - min) + min; }
+
+        var interval = setInterval(function() {
+            var timeLeft = animationEnd - Date.now();
+            if (timeLeft <= 0) return clearInterval(interval);
+            var particleCount = 50 * (timeLeft / duration);
+            confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
+            confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
+        }, 250);
     }
 
     function renderCard(c, large, idx) {
@@ -381,10 +542,10 @@
     function reqNextGame() {
         socket.emit('next_game', {room: currentRoom});
     }
+    function reqResetGame() {
+        if(!confirm("本当に点数をリセットして最初から始めますか？")) return;
+        socket.emit('reset_game', {room: currentRoom});
+    }
 </script>
 </body>
 </html>
-
-
-
-
