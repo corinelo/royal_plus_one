@@ -59,6 +59,7 @@ class GameState:
         if len(self.players) >= self.max_players: return False
         self.players.append({
             "sid": sid, "name": name, "hand": [], "score": 0,
+            "last_round_score": 0, # 追加: 今回の変動スコア
             "id": len(self.players), "is_cpu": is_cpu
         })
         if not is_cpu: self.add_log(f"👋 {name} joined.")
@@ -84,6 +85,9 @@ class GameState:
         if not keep_scores:
             for p in self.players: p['score'] = 0
         
+        # ラウンド開始時に前回の増減履歴はリセット
+        for p in self.players: p['last_round_score'] = 0
+
         self.num_players = len(self.players)
         self.deck = [{"suit": s, "rank": r} for s in SUITS for r in RANKS]
         self.deck.append({"suit": "JK", "rank": 99})
@@ -117,10 +121,6 @@ class GameState:
     def sort_hand(self, hand): hand.sort(key=lambda x: (SORT_MAP.get(int(x["rank"]), 99), x["suit"]))
 
     def draw_all(self, cause_sid=None):
-        """
-        全員1枚ドロー。
-        cause_sid: 場を流した原因となったプレイヤーのSID。このプレイヤーのみ演出フラグ(dramatic=True)を送る。
-        """
         if not self.deck: return
         self.add_log("Draw Phase (All players draw 1 card)")
         
@@ -132,27 +132,33 @@ class GameState:
                 p["hand"].append(card)
                 self.sort_hand(p["hand"])
                 
-                # 個別に通知 (演出用)
                 if not p.get('is_cpu'):
-                    # 自分が原因の場合のみドラマチック演出
                     is_dramatic = (cause_sid is not None) and (p['sid'] == cause_sid)
                     socketio.emit('player_drew', {'card': card, 'dramatic': is_dramatic}, room=p['sid'])
 
     def calculate_scores(self, winner_idx, is_tenhou=False):
         total_lost = 0
         next_parent = winner_idx
+        
+        # まず敗者の計算
         for i, p in enumerate(self.players):
             if i == winner_idx: continue
             loss = sum(2 if c["rank"] == 99 else 1 for c in p["hand"])
             if is_tenhou: loss = 10 
             if not is_tenhou and i == self.parent_idx:
                 loss = math.ceil(loss * 1.5)
-            p["score"] -= loss
-            total_lost += loss
             
-        self.players[winner_idx]["score"] += total_lost
+            p["score"] -= loss
+            p["last_round_score"] = -loss # 負け分を記録
+            total_lost += loss
+        
+        # 勝者の計算
+        winner = self.players[winner_idx]
+        winner["score"] += total_lost
+        winner["last_round_score"] = total_lost # 勝ち分を記録
+        
         self.parent_idx = next_parent
-        self.add_log(f"🏆 Winner: {self.players[winner_idx]['name']}! (+{total_lost} pts)")
+        self.add_log(f"🏆 Winner: {winner['name']}! (+{total_lost} pts)")
 
     def analyze_hand_composition(self, cards):
         if not cards: return None
@@ -161,38 +167,30 @@ class GameState:
         joker_count = len(cards) - len(non_jokers)
         total_len = len(cards)
 
-        # [2] (Rank 15) Check
         if any(c["rank"] == 15 for c in non_jokers):
             if total_len > 1: return None 
 
-        # All Jokers?
         if not non_jokers:
             if total_len == 1: return {'type': 'single', 'rank': 99, 'len': 1}
             if total_len == 2: return {'type': 'pair', 'rank': 99, 'len': 2}
-            # Jokerのみの階段はFlex無限大
             return {'type': 'stairs', 'rank': 99, 'len': total_len, 'flex': 99} 
 
         non_jokers.sort(key=lambda x: SORT_MAP.get(x["rank"], 0))
         min_r = non_jokers[0]["rank"]
         max_r = non_jokers[-1]["rank"]
         
-        # --- Single / Pair ---
         if all(c["rank"] == min_r for c in non_jokers):
             return {'type': 'pair' if total_len > 1 else 'single', 'rank': min_r, 'len': total_len}
 
-        # --- Stairs (Sequence) ---
         ranks = [c["rank"] for c in non_jokers]
         is_stairs = (len(set(ranks)) == len(ranks))
         if is_stairs and total_len >= 3:
             needed = (max_r - min_r + 1) - len(non_jokers)
             if joker_count >= needed:
                  spare = joker_count - needed
-                 # 【修正】Flex計算
-                 # spare分だけ開始位置を上にずらしても成立する
                  start_rank = max(3, min_r - spare)
                  return {'type': 'stairs', 'rank': start_rank, 'len': total_len, 'flex': spare}
 
-        # --- Pair Stairs (Sequence of Pairs) ---
         if total_len >= 4 and total_len % 2 == 0:
             from collections import Counter
             counts = Counter(ranks)
@@ -215,7 +213,6 @@ class GameState:
                         cost += (2 - has_count)
                     
                     if valid_range and cost <= joker_count:
-                        # ここも厳密にはFlex可能だが、一旦固定
                         return {'type': 'pair_stairs', 'rank': s_rank, 'len': total_len}
 
         return None
@@ -241,7 +238,6 @@ class GameState:
         c_type = comp['type']
         
         if f_type != c_type:
-            # 自分がAll Jokerなら相手に合わせる
             if all(c['rank']==99 for c in cards): pass 
             else: return False
 
@@ -257,10 +253,6 @@ class GameState:
         if c_rank == 99: return True 
         if f_rank == 14 and c_rank != 15: return False
 
-        # 【修正】階段のFlex対応
-        # 場: Rank X -> 次は Rank X+1
-        # 自分: Rank Y 〜 Y+Flex
-        # 要求: X+1 が [Y, Y+Flex] に含まれればOK
         if c_type == 'stairs':
             target = f_rank + 1
             c_min = c_rank
@@ -303,7 +295,6 @@ class GameState:
                 self.add_log(f"⚡ {'8-Cut' if any(c['rank']==8 for c in selected) else '2-Power'}!")
                 emit_update(self.room_id)
                 socketio.sleep(1.0)
-                # 8/2を出した本人がCause
                 self.draw_all(cause_sid=sid)
                 self.field = []
                 self.field_type = None
@@ -339,7 +330,6 @@ class GameState:
                 emit_update(self.room_id)
                 socketio.sleep(1.0)
                 
-                # 全員パスで流れた場合、最後にカードを出していた人がCause
                 cause_sid = None
                 if self.field_owner is not None and 0 <= self.field_owner < len(self.players):
                     cause_sid = self.players[self.field_owner]['sid']
@@ -404,7 +394,9 @@ class GameState:
             if is_me: my_hand = p['hand']; my_idx = i; my_score = p['score']
             players_public.append({
                 "id": i, "name": p['name'], "hand_count": len(p['hand']),
-                "score": p['score'], "is_me": is_me, "is_cpu": p.get('is_cpu')
+                "score": p['score'], 
+                "last_round_score": p['last_round_score'], # 追加: フロントで表示するため
+                "is_me": is_me, "is_cpu": p.get('is_cpu')
             })
         return {
             "room_id": self.room_id, "players": players_public,
