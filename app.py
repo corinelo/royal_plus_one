@@ -32,6 +32,7 @@ def on_stamp(data):
 # --- ゲーム定数 ---
 SUITS = ['♠', '♥', '♦', '♣']
 RANKS = list(range(3, 16))
+# 3=3... A=14, 2=15, JK=99
 SORT_MAP = {
     3: 0, 4: 1, 5: 2, 6: 3, 7: 4, 8: 5, 9: 6, 10: 7, 
     11: 8, 12: 9, 13: 10, 14: 11, 15: 12, 99: 13
@@ -44,7 +45,7 @@ class GameState:
         self.max_players = 4
         self.deck = []
         self.field = []
-        self.field_type = None 
+        self.field_type = None
         self.field_owner = None
         self.turn_idx = 0
         self.parent_idx = 0
@@ -90,6 +91,7 @@ class GameState:
         random.shuffle(self.deck)
 
         for p in self.players: p["hand"] = []
+        # 初期手札5枚
         for _ in range(5):
             for i in range(self.num_players):
                 if self.deck: self.players[i]["hand"].append(self.deck.pop())
@@ -117,7 +119,7 @@ class GameState:
     def draw_all(self, cause_sid=None):
         """
         全員1枚ドロー。
-        cause_sid: 場を流した原因となったプレイヤーのSID (このプレイヤーだけ演出あり)
+        cause_sid: 場を流した原因となったプレイヤーのSID。このプレイヤーのみ演出フラグ(dramatic=True)を送る。
         """
         if not self.deck: return
         self.add_log("Draw Phase (All players draw 1 card)")
@@ -130,9 +132,10 @@ class GameState:
                 p["hand"].append(card)
                 self.sort_hand(p["hand"])
                 
+                # 個別に通知 (演出用)
                 if not p.get('is_cpu'):
-                    # 自分が場を流したときのみ dramatic=True
-                    is_dramatic = (p['sid'] == cause_sid)
+                    # 自分が原因の場合のみドラマチック演出
+                    is_dramatic = (cause_sid is not None) and (p['sid'] == cause_sid)
                     socketio.emit('player_drew', {'card': card, 'dramatic': is_dramatic}, room=p['sid'])
 
     def calculate_scores(self, winner_idx, is_tenhou=False):
@@ -158,29 +161,38 @@ class GameState:
         joker_count = len(cards) - len(non_jokers)
         total_len = len(cards)
 
+        # [2] (Rank 15) Check
         if any(c["rank"] == 15 for c in non_jokers):
             if total_len > 1: return None 
 
+        # All Jokers?
         if not non_jokers:
             if total_len == 1: return {'type': 'single', 'rank': 99, 'len': 1}
             if total_len == 2: return {'type': 'pair', 'rank': 99, 'len': 2}
-            return {'type': 'stairs', 'rank': 99, 'len': total_len}
+            # Jokerのみの階段はFlex無限大
+            return {'type': 'stairs', 'rank': 99, 'len': total_len, 'flex': 99} 
 
         non_jokers.sort(key=lambda x: SORT_MAP.get(x["rank"], 0))
         min_r = non_jokers[0]["rank"]
         max_r = non_jokers[-1]["rank"]
         
+        # --- Single / Pair ---
         if all(c["rank"] == min_r for c in non_jokers):
             return {'type': 'pair' if total_len > 1 else 'single', 'rank': min_r, 'len': total_len}
 
+        # --- Stairs (Sequence) ---
         ranks = [c["rank"] for c in non_jokers]
         is_stairs = (len(set(ranks)) == len(ranks))
         if is_stairs and total_len >= 3:
             needed = (max_r - min_r + 1) - len(non_jokers)
             if joker_count >= needed:
-                 start_rank = max(3, min_r - (joker_count - needed))
-                 return {'type': 'stairs', 'rank': start_rank, 'len': total_len}
+                 spare = joker_count - needed
+                 # 【修正】Flex計算
+                 # spare分だけ開始位置を上にずらしても成立する
+                 start_rank = max(3, min_r - spare)
+                 return {'type': 'stairs', 'rank': start_rank, 'len': total_len, 'flex': spare}
 
+        # --- Pair Stairs (Sequence of Pairs) ---
         if total_len >= 4 and total_len % 2 == 0:
             from collections import Counter
             counts = Counter(ranks)
@@ -203,6 +215,7 @@ class GameState:
                         cost += (2 - has_count)
                     
                     if valid_range and cost <= joker_count:
+                        # ここも厳密にはFlex可能だが、一旦固定
                         return {'type': 'pair_stairs', 'rank': s_rank, 'len': total_len}
 
         return None
@@ -228,6 +241,7 @@ class GameState:
         c_type = comp['type']
         
         if f_type != c_type:
+            # 自分がAll Jokerなら相手に合わせる
             if all(c['rank']==99 for c in cards): pass 
             else: return False
 
@@ -242,7 +256,19 @@ class GameState:
         c_rank = comp['rank']
         if c_rank == 99: return True 
         if f_rank == 14 and c_rank != 15: return False
-        
+
+        # 【修正】階段のFlex対応
+        # 場: Rank X -> 次は Rank X+1
+        # 自分: Rank Y 〜 Y+Flex
+        # 要求: X+1 が [Y, Y+Flex] に含まれればOK
+        if c_type == 'stairs':
+            target = f_rank + 1
+            c_min = c_rank
+            c_max = c_rank + comp.get('flex', 0)
+            if c_min <= target <= c_max:
+                return True
+            return False
+
         return c_rank == f_rank + 1
 
     def format_cards_log(self, cards):
@@ -277,7 +303,7 @@ class GameState:
                 self.add_log(f"⚡ {'8-Cut' if any(c['rank']==8 for c in selected) else '2-Power'}!")
                 emit_update(self.room_id)
                 socketio.sleep(1.0)
-                # 8/2切りした本人がCause
+                # 8/2を出した本人がCause
                 self.draw_all(cause_sid=sid)
                 self.field = []
                 self.field_type = None
@@ -313,13 +339,12 @@ class GameState:
                 emit_update(self.room_id)
                 socketio.sleep(1.0)
                 
-                # 全員パスで流れた場合、最後にカードを出していた人(field_owner)がCause
-                owner_sid = None
+                # 全員パスで流れた場合、最後にカードを出していた人がCause
+                cause_sid = None
                 if self.field_owner is not None and 0 <= self.field_owner < len(self.players):
-                     owner_sid = self.players[self.field_owner]['sid']
+                    cause_sid = self.players[self.field_owner]['sid']
 
-                self.draw_all(cause_sid=owner_sid)
-                
+                self.draw_all(cause_sid=cause_sid)
                 self.field = []
                 self.field_type = None
                 self.field_owner = None
@@ -398,7 +423,6 @@ def on_join(data):
     room_id = data['room']
     if room_id not in rooms: rooms[room_id] = GameState(room_id)
     game = rooms[room_id]
-    
     existing = next((p for p in game.players if p['name'] == data['name']), None)
     if existing:
         existing['sid'] = request.sid 
@@ -406,7 +430,6 @@ def on_join(data):
     else:
         if not game.game_started:
             game.add_player(request.sid, data['name'])
-    
     join_room(room_id)
     emit_update(room_id)
 
