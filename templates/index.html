@@ -8,16 +8,6 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon.png') }}">
-    <script src="https://cdn.tailwindcss.com"></script><!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Getsurai</title>
-    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon.png') }}">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -28,27 +18,45 @@
         .bg-my-turn { background: radial-gradient(circle at center, #065f46 0%, #022c22 100%); }
         .bg-wait { background: radial-gradient(circle at center, #1e293b 0%, #020617 100%); }
         
-        /* カードデザイン調整 */
         .card-base { 
             background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%); 
-            border-radius: 6px; /* 角丸を少し大きく */
-            box-shadow: 2px 2px 5px rgba(0,0,0,0.3); 
+            border-radius: 8px; 
+            box-shadow: 2px 2px 6px rgba(0,0,0,0.4); 
             border: 1px solid #e5e7eb; 
             transition: transform 0.1s; 
         }
-        .card.selected { transform: translateY(-20px) scale(1.05) !important; z-index: 30; border-color: #facc15; box-shadow: 0 0 12px rgba(250, 204, 21, 0.8); }
-        .card-back { background: repeating-linear-gradient(45deg, #b91c1c, #b91c1c 5px, #991b1b 5px, #991b1b 10px); border: 1px solid #fff; border-radius: 3px; }
-        .hint-blue { box-shadow: 0 0 8px #3b82f6; border-color: #3b82f6; }
+        .card-w { width: 5rem; } 
+        .card-h { height: 7rem; } 
+
+        .card.selected { transform: translateY(-25px) scale(1.1) !important; z-index: 30; border-color: #facc15; box-shadow: 0 0 15px rgba(250, 204, 21, 0.9); }
+        .card-back { background: repeating-linear-gradient(45deg, #b91c1c, #b91c1c 5px, #991b1b 5px, #991b1b 10px); border: 2px solid #fff; border-radius: 6px; }
+        
+        .hint-blue { box-shadow: 0 0 10px #3b82f6; border: 2px solid #3b82f6; }
+        .card-dim { filter: brightness(0.6); }
         
         .log-area::-webkit-scrollbar { width: 3px; }
         .log-area::-webkit-scrollbar-thumb { background-color: #4b5563; }
         @keyframes floatUp { 0% {transform:translateY(0) scale(0.5);opacity:0} 20%{transform:translateY(-20px) scale(1.2);opacity:1} 100%{transform:translateY(-80px) scale(0.8);opacity:0}}
         .stamp-anim { animation: floatUp 2s ease-out forwards; pointer-events: none; }
+
+        @keyframes spotlight { 0% { opacity: 0; } 100% { opacity: 1; } }
+        @keyframes flipIn { 0% { transform: rotateY(90deg); } 100% { transform: rotateY(0); } }
+        .spotlight-bg { background: radial-gradient(circle, transparent 10%, #000 90%); }
     </style>
 </head>
 <body class="bg-wait text-white flex flex-col">
 
     <div id="stamp-layer" class="absolute inset-0 pointer-events-none z-[45] overflow-hidden"></div>
+
+    <div id="draw-overlay" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/80 spotlight-bg">
+        <div id="draw-card-container" class="relative w-40 h-56 transition-all duration-700 transform">
+            <div id="draw-card-back" class="absolute inset-0 card-back shadow-2xl"></div>
+            <div id="draw-card-front" class="absolute inset-0 card-base flex flex-col items-center justify-center hidden">
+                <span id="draw-rank" class="font-bold text-6xl"></span>
+                <span id="draw-suit" class="text-3xl mt-2"></span>
+            </div>
+        </div>
+    </div>
 
     <div id="lobby-screen" class="absolute inset-0 z-50 flex items-center justify-center bg-black/95 p-4">
         <div class="bg-gray-800 p-6 rounded-xl shadow-2xl border border-yellow-500/30 text-center max-w-md w-full">
@@ -73,73 +81,106 @@
 
     <div id="game-screen" class="hidden flex-grow flex flex-row h-full w-full overflow-hidden">
         <div class="flex-grow flex flex-col relative h-full min-w-0">
-            <div class="flex justify-between items-center px-2 h-8 shrink-0 bg-black/20">
-                <div class="text-base text-yellow-500 font-casino truncate">Getsurai <span id="room-display" class="text-[10px] text-gray-400"></span></div>
+            <div class="flex justify-between items-center px-3 h-10 shrink-0 bg-black/20">
+                <div class="text-lg text-yellow-500 font-casino truncate">Getsurai <span id="room-display" class="text-xs text-gray-400"></span></div>
                 <div class="flex gap-2 items-center">
-                    <div class="bg-black/40 px-2 py-0.5 rounded-full text-[9px] text-gray-400">DECK <span id="deck-count" class="text-white font-bold">0</span></div>
-                    <button onclick="document.getElementById('rule-modal').classList.remove('hidden')" class="bg-gray-700 text-white px-2 py-0.5 rounded text-[9px]">RULES</button>
+                    <div class="bg-black/40 px-3 py-1 rounded-full text-xs text-gray-400">DECK <span id="deck-count" class="text-white font-bold">0</span></div>
+                    <button onclick="document.getElementById('rule-modal').classList.remove('hidden')" class="bg-gray-700 text-white px-3 py-1 rounded text-xs hover:bg-gray-600">RULES</button>
                 </div>
             </div>
 
-            <div id="opponents-area" class="flex justify-around items-start w-full h-14 shrink-0 mt-1"></div>
+            <div id="opponents-area" class="flex justify-around items-start w-full h-16 shrink-0 mt-2"></div>
 
             <div class="flex-grow flex flex-col items-center justify-center relative min-h-0">
-                <div class="text-[9px] tracking-widest text-yellow-200 opacity-80 mb-1">NEXT <span id="target-rank" class="text-xl font-casino font-bold text-white ml-1">-</span></div>
+                <div class="text-xs tracking-widest text-yellow-200 opacity-80 mb-1">NEXT <span id="target-rank" class="text-2xl font-casino font-bold text-white ml-2">-</span></div>
                 
-                <div id="field-container" class="relative w-full h-24 flex flex-col items-center justify-center">
+                <div id="field-container" class="relative w-full h-32 flex flex-col items-center justify-center">
                     <div id="field-cards" class="flex gap-2 items-center justify-center z-10"></div>
-                    <div id="field-owner-label" class="mt-2 opacity-0 bg-black/50 px-2 py-0.5 rounded-full text-[9px] text-yellow-300 font-bold">Played by: -</div>
+                    <div id="field-owner-label" class="mt-2 opacity-0 bg-black/50 px-3 py-0.5 rounded-full text-[10px] text-yellow-300 font-bold">Played by: -</div>
                 </div>
             </div>
 
-            <div class="w-full flex flex-col items-center pb-3 shrink-0 bg-gradient-to-t from-black/80 to-transparent relative">
-                <div class="absolute right-2 -top-8 z-40">
-                    <button onclick="document.getElementById('stamp-menu').classList.toggle('hidden')" class="w-8 h-8 rounded-full bg-gray-800 border border-gray-500 text-lg flex items-center justify-center shadow-lg">😊</button>
-                    <div id="stamp-menu" class="hidden absolute bottom-9 right-0 bg-gray-800 border border-gray-600 rounded p-1 grid grid-cols-4 gap-1 w-40 shadow-xl"></div>
+            <div class="w-full flex flex-col items-center pb-4 shrink-0 bg-gradient-to-t from-black/80 to-transparent relative">
+                <div class="absolute right-4 -top-10 z-40">
+                    <button onclick="document.getElementById('stamp-menu').classList.toggle('hidden')" class="w-10 h-10 rounded-full bg-gray-800 border border-gray-500 text-xl flex items-center justify-center shadow-lg active:scale-95">😊</button>
+                    <div id="stamp-menu" class="hidden absolute bottom-12 right-0 bg-gray-800 border border-gray-600 rounded p-2 grid grid-cols-4 gap-2 w-48 shadow-xl"></div>
                 </div>
 
-                <div class="flex items-center gap-2 bg-gray-900/90 border border-yellow-500/50 px-3 py-0.5 rounded-full mb-2 shadow-lg">
-                    <span class="text-[9px] text-yellow-500 font-bold">SCORE</span>
-                    <span id="my-score" class="text-sm font-mono font-bold text-white">0</span>
-                    <span id="parent-badge" class="hidden bg-red-600 text-[9px] px-1.5 rounded text-white font-bold">DEALER</span>
+                <div class="flex items-center gap-3 bg-gray-900/90 border border-yellow-500/50 px-4 py-1 rounded-full mb-3 shadow-lg">
+                    <span class="text-[10px] text-yellow-500 font-bold">SCORE</span>
+                    <span id="my-score" class="text-base font-mono font-bold text-white">0</span>
+                    <span id="parent-badge" class="hidden bg-red-600 text-[10px] px-2 py-0.5 rounded text-white font-bold">DEALER</span>
                 </div>
 
-                <div id="my-hand" class="flex justify-center -space-x-5 px-2 h-24 items-end mb-2 w-full overflow-visible"></div>
+                <div id="my-hand" class="flex justify-center -space-x-8 px-4 h-32 items-end mb-2 w-full overflow-visible"></div>
 
-                <div class="flex justify-center gap-3 h-10 w-full px-4 max-w-md">
-                    <button id="btn-play" onclick="playCards()" class="hidden w-1/2 bg-blue-600 active:bg-blue-400 text-white font-bold rounded-full shadow-lg text-sm tracking-widest border border-blue-400">PLAY</button>
-                    <button id="btn-pass" onclick="passTurn()" class="w-1/2 bg-gray-700 active:bg-gray-500 text-gray-300 font-bold rounded-full shadow-lg text-sm tracking-widest border border-gray-600">PASS</button>
+                <div class="flex justify-center gap-4 h-12 w-full px-4 max-w-md">
+                    <button id="btn-play" onclick="playCards()" class="hidden w-1/2 bg-blue-600 active:bg-blue-400 text-white font-bold rounded-full shadow-lg text-lg tracking-widest border-2 border-blue-400">PLAY</button>
+                    <button id="btn-pass" onclick="passTurn()" class="w-1/2 bg-gray-700 active:bg-gray-500 text-gray-300 font-bold rounded-full shadow-lg text-lg tracking-widest border border-gray-600">PASS</button>
                 </div>
             </div>
         </div>
 
-        <div class="w-20 sm:w-48 bg-gray-900 border-l border-gray-700 flex flex-col shrink-0">
-            <div id="game-log" class="flex-grow p-1 overflow-y-auto log-area space-y-1 text-[9px] font-mono text-gray-300 break-words leading-tight"></div>
+        <div class="w-24 sm:w-56 bg-gray-900 border-l border-gray-700 flex flex-col shrink-0">
+            <div id="game-log" class="flex-grow p-2 overflow-y-auto log-area space-y-1.5 text-[10px] sm:text-xs font-mono text-gray-300 break-words leading-tight"></div>
         </div>
     </div>
 
-    <div id="rule-modal" class="hidden fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-4" onclick="this.classList.add('hidden')">
-        <div class="bg-gray-800 text-gray-200 p-4 rounded-lg max-w-sm w-full text-xs" onclick="event.stopPropagation()">
-            <h2 class="text-lg font-bold text-yellow-500 mb-2">Rules</h2>
-            <p>Play <strong>Rank +1</strong> (e.g. 5->6).</p>
-            <ul class="list-disc ml-4 my-2"><li>2: Strongest Single</li><li>8: Cut</li><li>JK: Wild</li></ul>
-            <p>Clear -> Draw 1 card.</p>
+    <div id="rule-modal" class="hidden fixed inset-0 bg-black/90 z-[70] flex items-center justify-center p-4 overflow-y-auto" onclick="this.classList.add('hidden')">
+        <div class="bg-gray-800 text-gray-200 p-6 rounded-lg max-w-md w-full shadow-2xl border border-gray-600" onclick="event.stopPropagation()">
+            <h2 class="text-2xl font-bold text-yellow-500 mb-4 border-b border-gray-600 pb-2">Getsurai Rules</h2>
+            
+            <h3 class="text-lg font-bold text-white mt-3">⚡ 基本ルール</h3>
+            <p class="text-sm mt-1">場に出ているカードのランク <span class="text-yellow-400 font-bold text-base">「+1」</span> のカードのみ出せます。</p>
+            <p class="text-xs text-gray-400">(例: 場が5なら6のみ。7は出せない)</p>
+
+            <h3 class="text-lg font-bold text-white mt-3">🃏 役の種類</h3>
+            <ul class="list-disc ml-5 text-sm space-y-1">
+                <li><strong>Single:</strong> 1枚出し</li>
+                <li><strong>Pair:</strong> 同じ数2枚 (例: 5,5)</li>
+                <li><strong>Stairs:</strong> 連続数3枚以上 (例: 3,4,5)</li>
+                <li><strong>Pair Stairs:</strong> <span class="text-green-400">New!</span> 連続ペア2組以上 (例: 3,3,4,4)</li>
+            </ul>
+            <p class="text-xs text-gray-400 mt-1">※場と同じ枚数・構成で、開始ランクを+1して出す。</p>
+
+            <h3 class="text-lg font-bold text-white mt-3">🔥 特殊カード</h3>
+            <ul class="list-disc ml-5 text-sm space-y-1">
+                <li><strong>[2]:</strong> Single最強。即座に場が流れる。</li>
+                <li><strong>[8]:</strong> 8切り。含むと即座に場が流れる。</li>
+                <li><strong>[JK]:</strong> ワイルドカード。単体出し禁止。</li>
+                <li><strong>[A]:</strong> 次は2しか出せない(実質パス)。</li>
+            </ul>
+
+            <h3 class="text-lg font-bold text-white mt-3">💰 点数計算</h3>
+            <ul class="list-disc ml-5 text-sm space-y-1">
+                <li>勝者総取り (敗者が点を支払う)</li>
+                <li>手札残り1枚につき: <span class="text-red-400">-1点</span></li>
+                <li>JK持ち: <span class="text-red-400">-2点</span>/枚</li>
+                <li>親が負けると支払いは <span class="text-red-400">1.5倍</span></li>
+            </ul>
         </div>
     </div>
 
     <div id="modal-overlay" class="hidden fixed inset-0 bg-black/95 z-50 flex flex-col items-center justify-center p-4">
-        <h2 class="text-4xl font-casino text-yellow-400 mb-4 animate-pulse">FINISH!!</h2>
-        <div id="modal-scores" class="w-full max-w-xs bg-gray-900 p-4 rounded mb-6 text-sm"></div>
-        <div class="flex gap-2 w-full max-w-xs">
-            <button onclick="reqNextGame()" class="flex-1 bg-white text-black font-bold py-3 rounded">NEXT</button>
-            <button onclick="reqResetGame()" class="flex-1 bg-red-900 text-white font-bold py-3 rounded">RESET</button>
+        <h2 class="text-5xl font-casino text-yellow-400 mb-6 animate-pulse">FINISH!!</h2>
+        <div id="modal-scores" class="w-full max-w-sm bg-gray-900 p-4 rounded mb-8 text-base"></div>
+        <div class="flex gap-4 w-full max-w-sm">
+            <button onclick="reqNextGame()" class="flex-1 bg-white hover:bg-gray-200 text-black font-bold py-4 rounded text-lg">NEXT GAME</button>
+            <button onclick="reqResetGame()" class="flex-1 bg-red-900 hover:bg-red-800 text-white font-bold py-4 rounded text-lg">RESET</button>
         </div>
     </div>
 
 <script>
     const socket = io();
     let currentRoom="", myName="", gameState={}, prevScores={}, selectedIndices=[];
-    const SUITS={'♠':'♠','♥':'♥','♦':'♦','♣':'♣','JK':'🤡'}, STAMPS=['👍','👎','😂','😭','😡','🤔','ざわ･･･','ﾌﾞｼｬｰ'];
+    const SUITS={'♠':'♠','♥':'♥','♦':'♦','♣':'♣','JK':'🤡'}, STAMPS=['👍','👎','😂','😭','😡','ﾊﾟ','ざわ…','ﾌﾞｼｬｰ'];
+
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === 'visible' && currentRoom) {
+            console.log("App active: reconnecting...");
+            socket.emit('join_game', {room: currentRoom, name: myName});
+        }
+    });
 
     window.onload = () => {
         const sn=localStorage.getItem('g_n'), sr=localStorage.getItem('g_r');
@@ -148,7 +189,7 @@
         const m = document.getElementById('stamp-menu');
         STAMPS.forEach(s=>{
             const b=document.createElement('button');
-            b.innerText=s; b.className="text-lg hover:scale-110";
+            b.innerText=s; b.className="text-2xl hover:scale-110 transition";
             b.onclick=()=>{socket.emit('send_stamp',{room:currentRoom,stamp_id:s}); m.classList.add('hidden');};
             m.appendChild(b);
         });
@@ -168,271 +209,47 @@
     function reqNextGame(){ socket.emit('next_game',{room:currentRoom}); }
     function reqResetGame(){ if(confirm("Reset?")) socket.emit('reset_game',{room:currentRoom}); }
 
-    socket.on('update_state', s => {
-        if(!s.game_over) s.players.forEach(p=>{ if(prevScores[p.id]===undefined||s.turn===0) {} });
-        gameState=s; if(s.room_id) currentRoom=s.room_id;
-        document.getElementById('lobby-screen').classList.add('hidden');
-        if(!s.game_started) {
-            document.getElementById('wait-screen').classList.remove('hidden');
-            document.getElementById('game-screen').classList.add('hidden');
-            updateLobby(s);
-            s.players.forEach(p=>prevScores[p.id]=p.score);
-        } else {
-            document.getElementById('wait-screen').classList.add('hidden');
-            document.getElementById('game-screen').classList.remove('hidden');
-            renderGame(s);
-        }
-    });
-
-    socket.on('receive_stamp', d => {
-        const el=document.createElement('div'); el.innerText=d.stamp_id; el.className="absolute text-4xl stamp-anim z-[50]";
-        let t=document.getElementById('opponents-area');
-        if(d.sid===socket.id) t=document.getElementById('my-hand');
-        const r=t.getBoundingClientRect();
-        el.style.left=(r.left+r.width/2-20)+'px'; el.style.top=(r.top+r.height/2-20)+'px';
-        document.getElementById('stamp-layer').appendChild(el);
-        setTimeout(()=>el.remove(),2000);
-    });
-
-    function updateLobby(s){
-        document.getElementById('display-room-id').innerText=currentRoom;
-        document.getElementById('player-list').innerHTML=s.players.map(p=>`<div class="bg-gray-800 p-2 rounded text-center w-16"><div class="text-lg">${p.is_cpu?'🤖':'👤'}</div><div class="text-[10px] truncate">${p.name}</div></div>`).join('');
-        if(s.players.length>=2) document.getElementById('btn-start').classList.remove('hidden');
-        else document.getElementById('btn-start').classList.add('hidden');
-    }
-
-    function getRankName(r) {
-        if(r===11)return'J'; if(r===12)return'Q'; if(r===13)return'K'; if(r===14)return'A'; if(r===15)return'2'; if(r===99)return'JK';
-        return r;
-    }
-
-    function renderGame(s){
-        document.getElementById('room-display').innerText=`${currentRoom}`;
-        document.getElementById('deck-count').innerText=s.deck_count;
-        document.body.className = (s.turn===s.my_idx) ? 'bg-my-turn text-white flex flex-col' : 'bg-wait text-white flex flex-col';
+    socket.on('player_drew', data => {
+        // --- 修正箇所: ドラマチックフラグがない場合は演出をスキップ ---
+        if (!data.dramatic) return;
+        // -----------------------------------------------------
         
-        // Log
-        const l=document.getElementById('game-log');
-        l.innerHTML=[...s.logs].reverse().map(g=>{
-            const c=g.includes(myName)||g.includes("YOU")?"text-yellow-400":"text-gray-400";
-            return `<div class="${c} border-b border-gray-800 pb-1 mb-1">${g.replace(" played","").replace(" passed"," pass")}</div>`;
-        }).join('');
-        l.scrollTop=0;
-
-        // Opponents
-        document.getElementById('opponents-area').innerHTML=s.players.filter(p=>!p.is_me).map(p=>`
-            <div class="flex flex-col items-center opacity-${s.turn===p.id?'100':'60'} scale-${s.turn===p.id?'110':'100'} transition-all">
-                <div class="relative w-8 h-8 rounded-full bg-gray-700 border flex items-center justify-center ${s.turn===p.id?'border-yellow-400':'border-gray-500'}">
-                    <span>${p.is_cpu?'🤖':'👤'}</span>
-                    ${s.parent===p.id?'<span class="absolute -top-1 -right-1 text-[8px]">👑</span>':''}
-                </div>
-                <div class="text-[8px] truncate w-12 text-center mt-0.5">${p.name}</div>
-                <div class="flex -space-x-1 mt-0.5 h-5">
-                    ${Array(Math.min(p.hand_count,10)).fill(0).map(()=>`<div class="w-3 h-4 bg-red-800 border border-white rounded-[1px]"></div>`).join('')}
-                </div>
-                <div class="text-[8px] text-gray-400">${p.score}</div>
-            </div>
-        `).join('');
-
-        // Field (重ならないように表示)
-        document.getElementById('field-cards').innerHTML=s.field.map((c,i)=>
-            `<div class="card-base w-14 h-20 flex flex-col items-center justify-center" style="transform:rotate(${(Math.random()-0.5)*3}deg)">
-                <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} font-bold text-2xl leading-none">${[11,12,13,14,15,99].includes(c.rank)?{11:'J',12:'Q',13:'K',14:'A',15:'2',99:'JK'}[c.rank]:c.rank}</span>
-                <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} text-xs">${SUITS[c.suit]}</span>
-            </div>`
-        ).join('');
-        document.getElementById('field-owner-label').style.opacity = s.field.length?'1':'0';
+        const overlay = document.getElementById('draw-overlay');
+        const container = document.getElementById('draw-card-container');
+        const front = document.getElementById('draw-card-front');
+        const rankSpan = document.getElementById('draw-rank');
+        const suitSpan = document.getElementById('draw-suit');
         
-        let t="ANY"; if(s.field.length){
-            const valid = s.field.filter(c=>c.rank!==99).map(c=>c.rank).sort((a,b)=>a-b);
-            const cur = valid.length ? valid[valid.length-1] : 99;
-            if(cur===99) t="FREE"; else if(cur===15) t="MAX"; else t={11:'J',12:'Q',13:'K',14:'A',15:'2',99:'JK'}[cur+1]||cur+1;
-        }
-        document.getElementById('target-rank').innerText=t;
+        const r = data.card.rank;
+        const s = data.card.suit;
+        const rTxt = [11,12,13,14,15,99].includes(r) ? {11:'J',12:'Q',13:'K',14:'A',15:'2',99:'JK'}[r] : r;
+        const isRed = ['♥','♦'].includes(s);
+        
+        rankSpan.innerText = rTxt;
+        suitSpan.innerText = SUITS[s];
+        rankSpan.className = `font-bold text-6xl leading-none ${isRed?'text-red-600':'text-gray-900'}`;
+        suitSpan.className = `text-4xl mt-2 ${isRed?'text-red-600':'text-gray-900'}`;
+        
+        overlay.classList.remove('hidden');
+        front.classList.add('hidden');
+        container.style.transform = "rotateY(0deg) scale(0.8)";
+        
+        setTimeout(() => {
+             container.style.transform = "scale(1.2)";
+        }, 100);
 
-        // Me
-        document.getElementById('my-score').innerText=s.my_score;
-        document.getElementById('parent-badge').classList.toggle('hidden', s.parent!==s.my_idx);
-        const myTurn = (s.turn===s.my_idx);
-        // 手札: 大きく表示
-        document.getElementById('my-hand').innerHTML=s.my_hand.map((c,i)=>{
-            const sel=selectedIndices.includes(i);
-            let cls = `card-base w-16 h-24 flex flex-col items-center justify-center cursor-pointer ${sel?'selected':(myTurn?'hint-blue':'')}`;
-            return `<div onclick="toggle(${i})" class="${cls}" style="margin-left:-24px;z-index:${i};transform:rotate(${(i-s.my_hand.length/2)*3}deg) translateY(${sel?-20:0}px)">
-                 <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} font-bold text-3xl leading-none">${[11,12,13,14,15,99].includes(c.rank)?{11:'J',12:'Q',13:'K',14:'A',15:'2',99:'JK'}[c.rank]:c.rank}</span>
-                 <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} text-lg">${SUITS[c.suit]}</span>
-            </div>`
-        }).join('');
+        setTimeout(() => {
+            container.style.transform = "rotateY(90deg) scale(1.2)";
+            setTimeout(() => {
+                front.classList.remove('hidden');
+                container.style.transform = "rotateY(0deg) scale(1.5)";
+            }, 300);
+        }, 1200);
 
-        if(myTurn){
-            document.getElementById('btn-pass').classList.remove('opacity-50'); document.getElementById('btn-pass').disabled=false;
-            if(selectedIndices.length) document.getElementById('btn-play').classList.remove('hidden');
-            else document.getElementById('btn-play').classList.add('hidden');
-        } else {
-            document.getElementById('btn-play').classList.add('hidden');
-            document.getElementById('btn-pass').classList.add('opacity-50'); document.getElementById('btn-pass').disabled=true;
-        }
-
-        if(s.game_over){
-            document.getElementById('modal-overlay').classList.remove('hidden');
-            document.getElementById('modal-scores').innerHTML=s.players.map(p=>{
-                const diff=p.score-(prevScores[p.id]||0);
-                return `<div class="flex justify-between py-1 border-b border-gray-700 text-white"><span>${p.name}</span><div class="text-right"><span class="text-xs ${diff>0?'text-green-400':'text-red-400'} mr-2">(${diff>0?'+':''}${diff})</span><span class="font-bold">${p.score}</span></div></div>`;
-            }).join('');
-            if(s.my_score-(prevScores[s.my_idx]||0) > 0) launchConfetti();
-        } else {
-            document.getElementById('modal-overlay').classList.add('hidden');
-        }
-    }
-
-    function toggle(i){ if(gameState.turn===gameState.my_idx){ const x=selectedIndices.indexOf(i); if(x>-1)selectedIndices.splice(x,1);else selectedIndices.push(i); renderGame(gameState); }}
-    function launchConfetti(){
-        var end=Date.now()+3000; (function frame(){
-            confetti({particleCount:5,angle:60,spread:55,origin:{x:0}}); confetti({particleCount:5,angle:120,spread:55,origin:{x:1}});
-            if(Date.now()<end) requestAnimationFrame(frame);
-        }());
-    }
-</script>
-</body>
-</html>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Roboto Mono', monospace; overflow: hidden; height: 100dvh; width: 100%; touch-action: manipulation; }
-        .font-casino { font-family: 'Cinzel', serif; }
-        .bg-my-turn { background: radial-gradient(circle at center, #065f46 0%, #022c22 100%); }
-        .bg-wait { background: radial-gradient(circle at center, #1e293b 0%, #020617 100%); }
-        .card-base { background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%); border-radius: 4px; box-shadow: 1px 1px 3px rgba(0,0,0,0.3); border: 1px solid #e5e7eb; transition: transform 0.1s; }
-        .card.selected { transform: translateY(-12px) scale(1.05) !important; z-index: 30; border-color: #facc15; box-shadow: 0 0 8px rgba(250, 204, 21, 0.8); }
-        .card-back { background: repeating-linear-gradient(45deg, #b91c1c, #b91c1c 5px, #991b1b 5px, #991b1b 10px); border: 1px solid #fff; border-radius: 2px; }
-        .hint-blue { box-shadow: 0 0 5px #3b82f6; border-color: #3b82f6; }
-        .log-area::-webkit-scrollbar { width: 3px; }
-        .log-area::-webkit-scrollbar-thumb { background-color: #4b5563; }
-        @keyframes floatUp { 0% {transform:translateY(0) scale(0.5);opacity:0} 20%{transform:translateY(-20px) scale(1.2);opacity:1} 100%{transform:translateY(-80px) scale(0.8);opacity:0}}
-        .stamp-anim { animation: floatUp 2s ease-out forwards; pointer-events: none; }
-    </style>
-</head>
-<body class="bg-wait text-white flex flex-col">
-
-    <div id="stamp-layer" class="absolute inset-0 pointer-events-none z-[45] overflow-hidden"></div>
-
-    <div id="lobby-screen" class="absolute inset-0 z-50 flex items-center justify-center bg-black/95 p-4">
-        <div class="bg-gray-800 p-6 rounded-xl shadow-2xl border border-yellow-500/30 text-center max-w-md w-full">
-            <h1 class="text-4xl font-casino text-yellow-500 mb-2">Getsurai</h1>
-            <input type="text" id="username" placeholder="Name" class="w-full bg-gray-700 p-3 rounded mb-4 text-white">
-            <div class="space-y-3">
-                <button onclick="startPractice()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded">PRACTICE (vs CPU)</button>
-                <div class="flex gap-2">
-                    <input type="text" id="room-id" placeholder="Room ID" class="w-2/3 bg-gray-700 p-3 rounded text-white">
-                    <button onclick="joinGame()" class="w-1/3 bg-yellow-600 hover:bg-yellow-500 text-black font-bold py-3 rounded">JOIN</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="wait-screen" class="hidden absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/90 p-4">
-        <h2 class="text-2xl font-casino text-white mb-4">Waiting...</h2>
-        <div id="player-list" class="flex gap-4 mb-8 flex-wrap justify-center"></div>
-        <button id="btn-start" onclick="startGame()" class="bg-green-600 hover:bg-green-500 px-8 py-3 rounded font-bold hidden">START</button>
-        <div class="text-gray-400 mt-4 text-sm">Room: <span id="display-room-id"></span></div>
-    </div>
-
-    <div id="game-screen" class="hidden flex-grow flex flex-row h-full w-full overflow-hidden">
-        <div class="flex-grow flex flex-col relative h-full min-w-0">
-            <div class="flex justify-between items-center px-2 h-8 shrink-0 bg-black/20">
-                <div class="text-base text-yellow-500 font-casino truncate">Getsurai <span id="room-display" class="text-[10px] text-gray-400"></span></div>
-                <div class="flex gap-2 items-center">
-                    <div class="bg-black/40 px-2 py-0.5 rounded-full text-[9px] text-gray-400">DECK <span id="deck-count" class="text-white font-bold">0</span></div>
-                    <button onclick="document.getElementById('rule-modal').classList.remove('hidden')" class="bg-gray-700 text-white px-2 py-0.5 rounded text-[9px]">RULES</button>
-                </div>
-            </div>
-
-            <div id="opponents-area" class="flex justify-around items-start w-full h-12 shrink-0 mt-1"></div>
-
-            <div class="flex-grow flex flex-col items-center justify-center relative min-h-0">
-                <div class="text-[9px] tracking-widest text-yellow-200 opacity-80">NEXT <span id="target-rank" class="text-lg font-casino font-bold text-white ml-1">-</span></div>
-                <div id="field-container" class="relative w-full h-16 flex flex-col items-center justify-center">
-                    <div id="field-cards" class="flex -space-x-8 z-10 scale-90"></div>
-                    <div id="field-owner-label" class="mt-1 opacity-0 bg-black/50 px-2 py-0.5 rounded-full text-[8px] text-yellow-300">Played by: -</div>
-                </div>
-            </div>
-
-            <div class="w-full flex flex-col items-center pb-2 shrink-0 bg-gradient-to-t from-black/70 to-transparent relative">
-                <div class="absolute right-1 -top-6 z-40">
-                    <button onclick="document.getElementById('stamp-menu').classList.toggle('hidden')" class="w-6 h-6 rounded-full bg-gray-800 border border-gray-500 text-sm flex items-center justify-center">😊</button>
-                    <div id="stamp-menu" class="hidden absolute bottom-7 right-0 bg-gray-800 border border-gray-600 rounded p-1 grid grid-cols-4 gap-1 w-32 shadow-xl"></div>
-                </div>
-
-                <div class="flex items-center gap-2 bg-gray-900/80 border border-yellow-500/30 px-2 py-0.5 rounded-full mb-1">
-                    <span class="text-[8px] text-yellow-500">SCORE</span>
-                    <span id="my-score" class="text-xs font-mono font-bold text-white">0</span>
-                    <span id="parent-badge" class="hidden bg-red-600 text-[8px] px-1 rounded text-white font-bold">DEALER</span>
-                </div>
-
-                <div id="my-hand" class="flex justify-center -space-x-4 px-2 h-16 items-end mb-1 w-full"></div>
-
-                <div class="flex justify-center gap-2 h-9 w-full px-2">
-                    <button id="btn-play" onclick="playCards()" class="hidden w-1/2 bg-blue-600 active:bg-blue-400 text-white font-bold rounded shadow-lg text-xs tracking-widest">PLAY</button>
-                    <button id="btn-pass" onclick="passTurn()" class="w-1/2 bg-gray-700 active:bg-gray-500 text-gray-300 font-bold rounded shadow-lg text-xs tracking-widest">PASS</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="w-16 sm:w-32 bg-gray-900 border-l border-gray-700 flex flex-col shrink-0">
-            <div id="game-log" class="flex-grow p-1 overflow-y-auto log-area space-y-1 text-[8px] font-mono text-gray-300 break-words leading-tight"></div>
-        </div>
-    </div>
-
-    <div id="rule-modal" class="hidden fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-4" onclick="this.classList.add('hidden')">
-        <div class="bg-gray-800 text-gray-200 p-4 rounded-lg max-w-sm w-full text-xs" onclick="event.stopPropagation()">
-            <h2 class="text-lg font-bold text-yellow-500 mb-2">Rules</h2>
-            <p>Play <strong>Rank +1</strong> (e.g. 5->6).</p>
-            <ul class="list-disc ml-4 my-2"><li>2: Strongest Single</li><li>8: Cut</li><li>JK: Wild</li></ul>
-            <p>Clear -> Draw 1 card.</p>
-        </div>
-    </div>
-
-    <div id="modal-overlay" class="hidden fixed inset-0 bg-black/95 z-50 flex flex-col items-center justify-center p-4">
-        <h2 class="text-4xl font-casino text-yellow-400 mb-4 animate-pulse">FINISH!!</h2>
-        <div id="modal-scores" class="w-full max-w-xs bg-gray-900 p-4 rounded mb-6 text-sm"></div>
-        <div class="flex gap-2 w-full max-w-xs">
-            <button onclick="reqNextGame()" class="flex-1 bg-white text-black font-bold py-3 rounded">NEXT</button>
-            <button onclick="reqResetGame()" class="flex-1 bg-red-900 text-white font-bold py-3 rounded">RESET</button>
-        </div>
-    </div>
-
-<script>
-    const socket = io();
-    let currentRoom="", myName="", gameState={}, prevScores={}, selectedIndices=[];
-    const SUITS={'♠':'♠','♥':'♥','♦':'♦','♣':'♣','JK':'🤡'}, STAMPS=['👍','👎','😂','😭','😡','🤔','ざわ･･･','ﾌﾞｼｬｰ'];
-
-    window.onload = () => {
-        const sn=localStorage.getItem('g_n'), sr=localStorage.getItem('g_r');
-        if(sn) document.getElementById('username').value=sn;
-        if(sr) document.getElementById('room-id').value=sr;
-        const m = document.getElementById('stamp-menu');
-        STAMPS.forEach(s=>{
-            const b=document.createElement('button');
-            b.innerText=s; b.className="text-lg hover:scale-110";
-            b.onclick=()=>{socket.emit('send_stamp',{room:currentRoom,stamp_id:s}); m.classList.add('hidden');};
-            m.appendChild(b);
-        });
-    };
-
-    function joinGame(){
-        const n=document.getElementById('username').value||"Guest", r=document.getElementById('room-id').value;
-        if(!r) return alert("Enter Room ID");
-        localStorage.setItem('g_n',n); localStorage.setItem('g_r',r);
-        myName=n; currentRoom=r;
-        socket.emit('join_game',{room:r,name:n});
-    }
-    function startPractice(){ myName=document.getElementById('username').value||"Player"; socket.emit('start_practice',{name:myName}); }
-    function startGame(){ socket.emit('start_game',{room:currentRoom}); }
-    function playCards(){ socket.emit('play_card',{room:currentRoom,indices:selectedIndices}); selectedIndices=[]; }
-    function passTurn(){ socket.emit('pass_turn',{room:currentRoom}); selectedIndices=[]; }
-    function reqNextGame(){ socket.emit('next_game',{room:currentRoom}); }
-    function reqResetGame(){ if(confirm("Reset?")) socket.emit('reset_game',{room:currentRoom}); }
+        setTimeout(() => {
+            overlay.classList.add('hidden');
+        }, 3000);
+    });
 
     socket.on('update_state', s => {
         if(!s.game_over) s.players.forEach(p=>{ if(prevScores[p.id]===undefined||s.turn===0) {} });
@@ -451,25 +268,20 @@
     });
 
     socket.on('receive_stamp', d => {
-        const el=document.createElement('div'); el.innerText=d.stamp_id; el.className="absolute text-4xl stamp-anim z-[50]";
+        const el=document.createElement('div'); el.innerText=d.stamp_id; el.className="absolute text-6xl stamp-anim z-[50]";
         let t=document.getElementById('opponents-area');
         if(d.sid===socket.id) t=document.getElementById('my-hand');
         const r=t.getBoundingClientRect();
-        el.style.left=(r.left+r.width/2-20)+'px'; el.style.top=(r.top+r.height/2-20)+'px';
+        el.style.left=(r.left+r.width/2-30)+'px'; el.style.top=(r.top+r.height/2-30)+'px';
         document.getElementById('stamp-layer').appendChild(el);
         setTimeout(()=>el.remove(),2000);
     });
 
     function updateLobby(s){
         document.getElementById('display-room-id').innerText=currentRoom;
-        document.getElementById('player-list').innerHTML=s.players.map(p=>`<div class="bg-gray-800 p-2 rounded text-center w-16"><div class="text-lg">${p.is_cpu?'🤖':'👤'}</div><div class="text-[10px] truncate">${p.name}</div></div>`).join('');
+        document.getElementById('player-list').innerHTML=s.players.map(p=>`<div class="bg-gray-800 p-3 rounded text-center w-20"><div class="text-3xl">${p.is_cpu?'🤖':'👤'}</div><div class="text-xs truncate mt-1">${p.name}</div></div>`).join('');
         if(s.players.length>=2) document.getElementById('btn-start').classList.remove('hidden');
         else document.getElementById('btn-start').classList.add('hidden');
-    }
-
-    function getRankName(r) {
-        if(r===11)return'J'; if(r===12)return'Q'; if(r===13)return'K'; if(r===14)return'A'; if(r===15)return'2'; if(r===99)return'JK';
-        return r;
     }
 
     function renderGame(s){
@@ -477,7 +289,6 @@
         document.getElementById('deck-count').innerText=s.deck_count;
         document.body.className = (s.turn===s.my_idx) ? 'bg-my-turn text-white flex flex-col' : 'bg-wait text-white flex flex-col';
         
-        // Log
         const l=document.getElementById('game-log');
         l.innerHTML=[...s.logs].reverse().map(g=>{
             const c=g.includes(myName)||g.includes("YOU")?"text-yellow-400":"text-gray-400";
@@ -485,47 +296,69 @@
         }).join('');
         l.scrollTop=0;
 
-        // Opponents
         document.getElementById('opponents-area').innerHTML=s.players.filter(p=>!p.is_me).map(p=>`
-            <div class="flex flex-col items-center opacity-${s.turn===p.id?'100':'60'} scale-${s.turn===p.id?'110':'100'} transition-all">
-                <div class="relative w-8 h-8 rounded-full bg-gray-700 border flex items-center justify-center ${s.turn===p.id?'border-yellow-400':'border-gray-500'}">
-                    <span>${p.is_cpu?'🤖':'👤'}</span>
-                    ${s.parent===p.id?'<span class="absolute -top-1 -right-1 text-[8px]">👑</span>':''}
+            <div class="flex flex-col items-center opacity-${s.turn===p.id?'100':'50'} scale-${s.turn===p.id?'110':'90'} transition-all">
+                <div class="relative w-10 h-10 rounded-full bg-gray-700 border-2 flex items-center justify-center ${s.turn===p.id?'border-yellow-400 shadow-[0_0_10px_orange]':'border-gray-500'}">
+                    <span class="text-lg">${p.is_cpu?'🤖':'👤'}</span>
+                    ${s.parent===p.id?'<span class="absolute -top-2 -right-1 text-sm">👑</span>':''}
                 </div>
-                <div class="text-[8px] truncate w-12 text-center mt-0.5">${p.name}</div>
-                <div class="flex -space-x-1 mt-0.5 h-5">
-                    ${Array(Math.min(p.hand_count,10)).fill(0).map(()=>`<div class="w-3 h-4 bg-red-800 border border-white rounded-[1px]"></div>`).join('')}
+                <div class="text-[10px] truncate w-14 text-center mt-1 font-bold">${p.name}</div>
+                <div class="flex -space-x-1.5 mt-1 h-6">
+                    ${Array(Math.min(p.hand_count,15)).fill(0).map(()=>`<div class="w-4 h-5 bg-red-800 border border-white rounded-[2px]"></div>`).join('')}
                 </div>
-                <div class="text-[8px] text-gray-400">${p.score}</div>
+                <div class="text-[10px] text-gray-400 font-mono">${p.score}</div>
             </div>
         `).join('');
 
-        // Field
         document.getElementById('field-cards').innerHTML=s.field.map((c,i)=>
-            `<div class="card-base w-9 h-12 flex flex-col items-center justify-center" style="margin-left:${i===0?0:-20}px;transform:rotate(${(Math.random()-0.5)*5}deg)">
-                <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} font-bold text-base leading-none">${[11,12,13,14,15,99].includes(c.rank)?{11:'J',12:'Q',13:'K',14:'A',15:'2',99:'JK'}[c.rank]:c.rank}</span>
-                <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} text-[8px]">${SUITS[c.suit]}</span>
+            `<div class="card-base card-w card-h flex flex-col items-center justify-center" style="transform:rotate(${(Math.random()-0.5)*5}deg)">
+                <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} font-bold text-4xl leading-none">${[11,12,13,14,15,99].includes(c.rank)?{11:'J',12:'Q',13:'K',14:'A',15:'2',99:'JK'}[c.rank]:c.rank}</span>
+                <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} text-xl">${SUITS[c.suit]}</span>
             </div>`
         ).join('');
         document.getElementById('field-owner-label').style.opacity = s.field.length?'1':'0';
         
-        let t="ANY"; if(s.field.length){
+        let tRankVal = null;
+        let tText = "ANY";
+        if(s.field.length){
             const valid = s.field.filter(c=>c.rank!==99).map(c=>c.rank).sort((a,b)=>a-b);
-            const cur = valid.length ? valid[valid.length-1] : 99;
-            if(cur===99) t="FREE"; else if(cur===15) t="MAX"; else t={11:'J',12:'Q',13:'K',14:'A',15:'2',99:'JK'}[cur+1]||cur+1;
+            const cur = valid.length ? valid[0] : 99;
+            if(cur===99){ tText="FREE"; }
+            else if(cur===14){ tText="2 Only"; tRankVal=15; }
+            else if(cur===15){ tText="MAX"; }
+            else {
+                tRankVal = cur + 1;
+                tText = {11:'J',12:'Q',13:'K',14:'A',15:'2',99:'JK'}[tRankVal] || tRankVal;
+            }
         }
-        document.getElementById('target-rank').innerText=t;
+        document.getElementById('target-rank').innerText=tText;
 
-        // Me
         document.getElementById('my-score').innerText=s.my_score;
         document.getElementById('parent-badge').classList.toggle('hidden', s.parent!==s.my_idx);
         const myTurn = (s.turn===s.my_idx);
+        
         document.getElementById('my-hand').innerHTML=s.my_hand.map((c,i)=>{
-            const sel=selectedIndices.includes(i);
-            let cls = `card-base w-11 h-16 flex flex-col items-center justify-center cursor-pointer ${sel?'selected':(myTurn?'hint-blue':'')}`;
-            return `<div onclick="toggle(${i})" class="${cls}" style="margin-left:-20px;z-index:${i};transform:rotate(${(i-s.my_hand.length/2)*3}deg) translateY(${sel?-20:0}px)">
-                 <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} font-bold text-lg leading-none">${[11,12,13,14,15,99].includes(c.rank)?{11:'J',12:'Q',13:'K',14:'A',15:'2',99:'JK'}[c.rank]:c.rank}</span>
-                 <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} text-[10px]">${SUITS[c.suit]}</span>
+            const sel = selectedIndices.includes(i);
+            const r = c.rank;
+            
+            let isPlayable = false;
+            if(!s.field.length) isPlayable = true;
+            else {
+                if(r === 99) isPlayable = true;
+                else if(tRankVal !== null && r === tRankVal) isPlayable = true;
+                if(r === 15) {
+                    if(s.field.length === 1) isPlayable = true;
+                }
+            }
+            if(!myTurn) isPlayable = false;
+
+            let cls = `card-base card-w card-h flex flex-col items-center justify-center cursor-pointer transition-all duration-200 
+                       ${sel ? 'selected' : ''} 
+                       ${isPlayable ? 'hint-blue' : (myTurn && s.field.length ? 'card-dim' : '')}`;
+
+            return `<div onclick="toggle(${i})" class="${cls}" style="margin-left:-36px;z-index:${i};transform:rotate(${(i-s.my_hand.length/2)*3}deg) translateY(${sel?-25:0}px)">
+                 <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} font-bold text-4xl leading-none">${[11,12,13,14,15,99].includes(c.rank)?{11:'J',12:'Q',13:'K',14:'A',15:'2',99:'JK'}[c.rank]:c.rank}</span>
+                 <span class="${['♥','♦'].includes(c.suit)?'text-red-600':'text-gray-900'} text-xl">${SUITS[c.suit]}</span>
             </div>`
         }).join('');
 
@@ -542,7 +375,13 @@
             document.getElementById('modal-overlay').classList.remove('hidden');
             document.getElementById('modal-scores').innerHTML=s.players.map(p=>{
                 const diff=p.score-(prevScores[p.id]||0);
-                return `<div class="flex justify-between py-1 border-b border-gray-700 text-white"><span>${p.name}</span><div class="text-right"><span class="text-xs ${diff>0?'text-green-400':'text-red-400'} mr-2">(${diff>0?'+':''}${diff})</span><span class="font-bold">${p.score}</span></div></div>`;
+                return `<div class="flex justify-between py-2 border-b border-gray-700 text-white">
+                            <span class="font-bold">${p.name}</span>
+                            <div class="text-right">
+                                <span class="text-sm ${diff>0?'text-green-400':'text-red-400'} mr-3">(${diff>0?'+':''}${diff})</span>
+                                <span class="font-bold text-xl">${p.score}</span>
+                            </div>
+                        </div>`;
             }).join('');
             if(s.my_score-(prevScores[s.my_idx]||0) > 0) launchConfetti();
         } else {
@@ -560,4 +399,3 @@
 </script>
 </body>
 </html>
-
